@@ -344,6 +344,9 @@ createSparseImage() {
   if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
     logInfo "createSparseImage(): Creating mount point $SPARSE_IMAGE_MOUNT...";
     `$MKDIR -p $SPARSE_IMAGE_MOUNT`;
+    if [ $? -ne 0 ] ; then
+        logFatal "createSparseImage(): Unable to create mount point $SPARSE_IMAGE_MOUNT; exiting.";
+    fi;
   fi;
 
   logInfo "createSparseImage(): Done.";
