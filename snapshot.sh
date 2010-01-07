@@ -101,21 +101,21 @@ LOG_WARNING=2;
 LOG_ERROR=1;
 LOG_FATAL=0;
 
-# Unset parameters (set within initialize())
-SOURCES="";
-SOURCE="";
-LOOP="";
-SPARSE_IMAGE_FILE="";
+# Unset parameters (set within startup())
+SOURCES=;
+SOURCE=;
+LOOP=;
+SPARSE_IMAGE_FILE=;
 
 #-----------------------------------------------------------------------
 #------------- User Parameters -----------------------------------------
 #-----------------------------------------------------------------------
-IMAGE_SIZE=50G;
-IMAGE_FS_TYPE=ext4;
-LOG_LEVEL=$LOG_INFO;
-SILENT=no;
-SPARSE_IMAGE_MOUNT=/mnt/odysseus-backup;
-SPARSE_IMAGE_DIR=/media/Tetsuo/snapshot_images;
+LOG_LEVEL=$LOG_WARNING; # see above $LOG_xxx
+SILENT=no; # no - print to console; yes - suppress console output
+IMAGE_SIZE=; # specify in M (megabytes) or G (gigabytes)
+IMAGE_FS_TYPE=; # use either ext4, ext3 or ext2 (must support hard-links)
+SPARSE_IMAGE_MOUNT=; # attatch image to this mountpoint 
+SPARSE_IMAGE_DIR=; # directory storing image file
 
 #-----------------------------------------------------------------------
 #------------- FUNCTIONS -----------------------------------------------
@@ -177,6 +177,35 @@ checkUser() {
 }
 
 #------------------------------------------------------------------------------
+# ensure that required fields are set
+#------------------------------------------------------------------------------
+checkFields() {
+  if [ $IMAGE_SIZE ] ; then
+    logDebug "checkFields(): IMAGE_SIZE is set.";
+  else
+    logFatal "checkFields(): IMAGE_SIZE is not set; exiting.";
+  fi;
+
+  if [ $IMAGE_FS_TYPE ] ; then
+    logDebug "checkFields(): IMAGE_FS_TYPE is set.";
+  else
+    logFatal "checkFields(): IMAGE_FS_TYPE is not set; exiting.";
+  fi;
+
+  if [ $SPARSE_IMAGE_MOUNT ] ; then
+    logDebug "checkFields(): SPARSE_IMAGE_MOUNT is set.";
+  else
+    logFatal "checkFields(): SPARSE_IMAGE_MOUNT is not set; exiting.";
+  fi;
+
+  if [ $SPARSE_IMAGE_DIR ] ; then
+    logDebug "checkFields(): SPARSE_IMAGE_DIR is set.";
+  else
+    logFatal "checkFields(): SPARSE_IMAGE_DIR is not set; exiting.";
+  fi;
+}
+
+#------------------------------------------------------------------------------
 # check for or create PID-based lockfile
 #------------------------------------------------------------------------------
 getLock() {
@@ -215,15 +244,6 @@ getLock() {
   logInfo "getLock(): Recording current PID $$ in lockfile $LOCK_FILE";
   echo $$ > $LOCK_FILE;
   logInfo "getLock(): Done.";
-}
-
-#------------------------------------------------------------------------------
-# delete $LOCK_FILE and mount readonly
-#------------------------------------------------------------------------------
-shutdown() {
-  mountSparseImageRO;
-  logInfo "shutdown(): Removing lock file $LOCK_FILE..."
-  $RM $LOCK_FILE
 }
 
 #------------------------------------------------------------------------------
@@ -290,74 +310,43 @@ createSparseImage() {
 
   logInfo "createSparseImage(): Creating file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE...";
   `$DD if=/dev/zero of=$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE bs=1 count=1 seek=$IMAGE_SIZE`;
+  if [ $? -ne 0 ] ; then
+      logFatal "createSparseImage(): Unable to create sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE; exiting.";
+  fi;
   logInfo "createSparseImage(): Creating partition...";
   `$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mklabel msdos`;
+  if [ $? -ne 0 ] ; then
+      logFatal "createSparseImage(): Unable to create partition table; exiting.";
+  fi;
   `$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mkpart primary 0G $IMAGE_SIZE`;
-  logInfo "createSparseImage(): Creating temp loopback device for initialization";
+  if [ $? -ne 0 ] ; then
+      logFatal "createSparseImage(): Unable to create partition; exiting.";
+  fi;
 
+  logInfo "createSparseImage(): Creating temp loopback device for initialization";
   CWD=`$LPWD`;
   cd $SPARSE_IMAGE_DIR;
     LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE`;
+    if [ $? -ne 0 ] ; then
+        logFatal "createSparseImage(): Unable to create device mapping using $KPARTX; exiting.";
+    fi;
     LOOP=`$ECHO $LOOP | $CUT -d' ' -f3`;
     LOOP=/dev/mapper/$LOOP;
     $ECHO "$LOOP" > $LOOP_DEV_STOR;
-    logInfo "createSparseImage(): Creating fs on $LOOP using $MKFS...";
-    `$MKFS -t $IMAGE_FS_TYPE $LOOP`;
   cd $CWD;
 
+  logInfo "createSparseImage(): Creating fs on $LOOP using $MKFS...";
+  `$MKFS -t $IMAGE_FS_TYPE $LOOP`;
+  if [ $? -ne 0 ] ; then
+      logFatal "createSparseImage(): Unable to create filesystem $IMAGE_FS_TYPE on $LOOP; exiting.";
+  fi;
+
+  if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
+    logInfo "createSparseImage(): Creating mount point $SPARSE_IMAGE_MOUNT...";
+    `$MKDIR -p $SPARSE_IMAGE_MOUNT`;
+  fi;
+
   logInfo "createSparseImage(): Done.";
-}
-
-#------------------------------------------------------------------------------
-# grouping of precursor tasks
-#------------------------------------------------------------------------------
-startup() {
-  logInfo "startup(): Beginning initialization...";
-  checkUser;
-  getLock;
-
-  if [ $SPARSE_IMAGE_STOR -a -f $SPARSE_IMAGE_STOR -a -s $SPARSE_IMAGE_STOR ] ; then
-    exec 3<&0;
-    exec 0<"$SPARSE_IMAGE_STOR";
-    while read -r SPARSE_IMAGE_FILE;
-    do 
-      logDebug "startup(): Sparse image file info read from file $SPARSE_IMAGE_FILE";
-      break;
-    done;
-  else
-    logInfo "startup(): No sparse image file defined; creating new...";
-    createSparseImage;
-  fi;
-
-  if [ $SPARSE_IMAGE_DIR -a $SPARSE_IMAGE_FILE -a -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE -a -s $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE ] ; then
-    logDebug "startup(): Sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE exists.";
-  else
-    logWarn "startup(): Sparse image file  $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE not found; creating new...";
-    createSparseImage;
-  fi;
-
-  logInfo "startup(): Using sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
-
-  checkWeeklyInterval;
-  checkDailyInterval;
-
-  mountSparseImageRW;
-
-  if [ $INCLUDES -a -f $INCLUDES -a -s $INCLUDES ] ; then
-    SOURCES=`$CAT $INCLUDES`;
-    for SOURCE in $SOURCES
-    do
-      if [ ! -d $SPARSE_IMAGE_MOUNT/$SOURCE ] ; then
-        logInfo "startup(): Creating new snapshot directory $SPARSE_IMAGE_MOUNT/$SOURCE";
-        $MKDIR -p $SPARSE_IMAGE_MOUNT/$SOURCE;
-      fi;
-      logDebug "startup(): Will take snapshot of /$SOURCE.";
-    done;
-  else
-    logFatal "startup(): Source listing is empty; verify entries in $INCLUDES";
-  fi;
-
-  logInfo "startup(): Done.";
 }
 
 #-----------------------------------------------------------------------
@@ -407,6 +396,9 @@ setupLoopDevice() {
 mountSparseImageRW() {
     setupLoopDevice;
     logInfo "mountSparseImageRW(): Re-mounting $LOOP to $SPARSE_IMAGE_MOUNT in readwrite...";
+    if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
+        logFatal "mountSparseImageRW(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
+    fi;
     `$MOUNT -t $IMAGE_FS_TYPE -o remount,rw,relatime,nodiratime $LOOP $SPARSE_IMAGE_MOUNT`;
     if [ $? -ne 0 ] ; then
         logWarn "mountSparseImageRW(): Trying without -o remount";
@@ -427,6 +419,9 @@ mountSparseImageRW() {
 mountSparseImageRO() {
     setupLoopDevice;
     logInfo "mountSparseImageRO(): Re-mounting $LOOP to $SPARSE_IMAGE_MOUNT in readonly...";
+    if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
+        logFatal "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
+    fi;
     `$MOUNT -t $IMAGE_FS_TYPE -o remount,ro,relatime,nodiratime $LOOP $SPARSE_IMAGE_MOUNT`;
     if [ $? -ne 0 ] ; then
         logWarn "mountSparseImageRO(): Trying without -o remount";
@@ -600,6 +595,70 @@ rotateWeeklySnapshot() {
   logInfo "rotateWeeklySnapshot(): Done.";
 }
 
+#------------------------------------------------------------------------------
+#------------- ORCHESTRATING FUNCTIONS ----------------------------------------
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+# grouping of precursor tasks
+#------------------------------------------------------------------------------
+startup() {
+  logInfo "startup(): Beginning initialization...";
+  checkUser;
+  checkFields;
+  getLock;
+
+  if [ $SPARSE_IMAGE_STOR -a -f $SPARSE_IMAGE_STOR -a -s $SPARSE_IMAGE_STOR ] ; then
+    exec 3<&0;
+    exec 0<"$SPARSE_IMAGE_STOR";
+    while read -r SPARSE_IMAGE_FILE;
+    do 
+      logDebug "startup(): Sparse image file info read from file $SPARSE_IMAGE_FILE";
+      break;
+    done;
+  else
+    logInfo "startup(): No sparse image file defined; creating new...";
+    createSparseImage;
+  fi;
+
+  if [ $SPARSE_IMAGE_DIR -a $SPARSE_IMAGE_FILE -a -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE -a -s $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE ] ; then
+    logDebug "startup(): Sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE exists.";
+  else
+    logWarn "startup(): Sparse image file  $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE not found; creating new...";
+    createSparseImage;
+  fi;
+
+  logInfo "startup(): Using sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
+
+  checkWeeklyInterval;
+  checkDailyInterval;
+
+  mountSparseImageRW;
+
+  if [ $INCLUDES -a -f $INCLUDES -a -s $INCLUDES ] ; then
+    SOURCES=`$CAT $INCLUDES`;
+    for SOURCE in $SOURCES
+    do
+      if [ ! -d $SPARSE_IMAGE_MOUNT/$SOURCE ] ; then
+        logInfo "startup(): Creating new snapshot directory $SPARSE_IMAGE_MOUNT/$SOURCE";
+        $MKDIR -p $SPARSE_IMAGE_MOUNT/$SOURCE;
+      fi;
+      logDebug "startup(): Will take snapshot of /$SOURCE.";
+    done;
+  else
+    logFatal "startup(): Source listing is empty; verify entries in $INCLUDES";
+  fi;
+
+  logInfo "startup(): Done.";
+}
+
+#------------------------------------------------------------------------------
+# delete $LOCK_FILE and mount readonly
+#------------------------------------------------------------------------------
+shutdown() {
+  mountSparseImageRO;
+  logInfo "shutdown(): Removing lock file $LOCK_FILE..."
+  $RM $LOCK_FILE
+}
 
 #------------------------------------------------------------------------------
 # Main
