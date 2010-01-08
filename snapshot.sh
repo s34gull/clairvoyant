@@ -461,8 +461,8 @@ makeHourlySnapshot() {
     # step 2: shift the middle snapshots(s) back by one, if they exist
     OLD=$[$i-1];
     if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$OLD ] ; then
-      logDebug "makeHourlySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/hourly.$OLD $SPARSE_IMAGE_MOUNT/home/hourly.$i";
-      $MV $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$OLD $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$i ;
+      logDebug "makeHourlySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/hourly.$OLD $SPARSE_IMAGE_MOUNT/home/hourly.$i >> $LOG_FILE 2>&1";
+      $MV $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$OLD $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$i >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
         logFatal "makeHourlySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$OLD; exiting.";
       fi;
@@ -472,8 +472,8 @@ makeHourlySnapshot() {
   # step 3: make a hard-link-only (except for dirs) copy of the latest snapshot,
   # if that exists
   if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0 ] ; then
-    logDebug "makeHourlySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0 $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.1";
-    $CP -al $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0 $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.1 ;
+    logDebug "makeHourlySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0 $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.1" >> $LOG_FILE 2>&1;
+    $CP -al $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0 $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.1 >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "makeHourlySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0; exiting.";
     fi;
@@ -487,16 +487,19 @@ makeHourlySnapshot() {
   # should have a corresponsing .exclude file.
   EXCLUDE_FILE=`$ECHO "$SOURCE" | $SED "s/\//./g"`
   EXCLUDE_FILE=$EXCLUDE_FILE.exclude
+  RSYNC_OPTS="--archive --delete --delete-excluded --sparse \
+      --exclude-from=$EXCLUDE_DIR/$EXCLUDE_FILE";
+  if [ $LOG_LEVEL -ge $LOG_DEBUG ]; then
+    RSYNC_OPTS="--verbose --progress $RSYNC_OPTS";
+  fi;
   logDebug "makeHourlySnapshot(): $RSYNC \
-      -va --delete --delete-excluded \
-      --exclude-from="$EXCLUDE_DIR/$EXCLUDE_FILE" \
-      /$SOURCE/ $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0/";
+      $RSYNC_OPTS \
+      /$SOURCE/ $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0/ >> $LOG_FILE 2>&1";
   $RSYNC \
-      -va --delete --delete-excluded \
-      --exclude-from="$EXCLUDE_DIR/$EXCLUDE_FILE" \
-      /$SOURCE/ $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0/ ;
+      $RSYNC_OPTS \
+      /$SOURCE/ $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0/ >> $LOG_FILE 2>&1;
   if [ $? -ne 0 ] ; then
-    logFatal "makeHourlySnapshot(): rsync failed; exiting.";
+    logError "makeHourlySnapshot(): rsync encountered an error - continuing";
   fi;
 
   # step 5: update the mtime of hourly.0 to reflect the snapshot time
@@ -522,7 +525,8 @@ rotateDailySnapshot() {
 
   # step 1: delete the oldest snapshot, if it exists:
   if [ -d $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT ] ; then
-    $RM -rf $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT ;
+    logDebug "rotateDailySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT >> $LOG_FILE 2>&1;";
+    $RM -rf $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "rotateDailySnapshot(): Unable to remove $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT; exiting.";
     fi;
@@ -534,7 +538,8 @@ rotateDailySnapshot() {
     # step 2: shift the middle snapshots(s) back by one, if they exist
     OLD=$[$i-1]
     if [ -d $SPARSE_IMAGE_MOUNT/home/daily.$OLD ] ; then
-      $MV $SPARSE_IMAGE_MOUNT/home/daily.$OLD $SPARSE_IMAGE_MOUNT/home/daily.$i ;
+      logDebug "rotateDailySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/daily.$OLD $SPARSE_IMAGE_MOUNT/home/daily.$i >> $LOG_FILE 2>&1;";
+      $MV $SPARSE_IMAGE_MOUNT/home/daily.$OLD $SPARSE_IMAGE_MOUNT/home/daily.$i >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
         logFatal "rotateDailySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/home/daily.$OLD; exiting.";
       fi;
@@ -544,7 +549,8 @@ rotateDailySnapshot() {
   # step 3: make a hard-link-only (except for dirs) copy of
   # hourly.3, assuming that exists, into daily.0
   if [ -d $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT ] ; then
-    $CP -al $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/daily.0 ;
+    logDebug "rotateDailySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/daily.0 >> $LOG_FILE 2>&1;";
+    $CP -al $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/daily.0 >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "rotateDailySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT; exiting.";
     fi;
@@ -567,7 +573,8 @@ rotateWeeklySnapshot() {
 
   # step 1: delete the oldest snapshot, if it exists:
   if [ -d $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT ] ; then
-    $RM -rf $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT ;
+    logDebug "rotateWeeklySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT >> $LOG_FILE 2>&1;";
+    $RM -rf $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "rotateWeeklySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT; exiting.";
     fi;
@@ -578,7 +585,8 @@ rotateWeeklySnapshot() {
     # step 2: shift the middle snapshots(s) back by one, if they exist
     OLD=$[$i-1]
     if [ -d $SPARSE_IMAGE_MOUNT/home/weekly.$OLD ] ; then
-      $MV $SPARSE_IMAGE_MOUNT/home/weekly.$OLD $SPARSE_IMAGE_MOUNT/home/weekly.$i ;
+      logDebug "rotateWeeklySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/weekly.$OLD $SPARSE_IMAGE_MOUNT/home/weekly.$i >> $LOG_FILE 2>&1;";
+      $MV $SPARSE_IMAGE_MOUNT/home/weekly.$OLD $SPARSE_IMAGE_MOUNT/home/weekly.$i >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
         logFatal "rotateWeeklySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/home/weekly.$OLD; exiting.";
       fi;
@@ -587,7 +595,8 @@ rotateWeeklySnapshot() {
   # step 3: make a hard-link-only (except for dirs) copy of
   # daily.2, assuming that exists, into weekly.0
   if [ -d $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT ] ; then
-    $CP -al $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/weekly.0 ;
+    logDebug "rotateWeeklySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/weekly.0 >> $LOG_FILE 2>&1;";
+    $CP -al $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/weekly.0 >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "rotateWeeklySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT; exiting.";
     fi;
