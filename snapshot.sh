@@ -335,8 +335,8 @@ createSparseImage() {
     $ECHO "$LOOP" > $LOOP_DEV_STOR;
   cd $CWD;
 
-  logInfo "createSparseImage(): Creating fs on $LOOP using $MKFS...";
-  `$MKFS -t $IMAGE_FS_TYPE $LOOP`;
+  logInfo "createSparseImage(): Creating $IMAGE_FS_TYPE fs on $LOOP using $MKFS...";
+  $MKFS -t $IMAGE_FS_TYPE $LOOP;
   if [ $? -ne 0 ] ; then
       logFatal "createSparseImage(): Unable to create filesystem $IMAGE_FS_TYPE on $LOOP; exiting.";
   fi;
