@@ -405,7 +405,7 @@ mountSparseImageRW() {
     `$MOUNT -t $IMAGE_FS_TYPE -o remount,rw,relatime,nodiratime $LOOP $SPARSE_IMAGE_MOUNT`;
     if [ $? -ne 0 ] ; then
         logWarn "mountSparseImageRW(): Trying without -o remount";
-        `$MOUNT -t $IMAGE_FS_TYPE -o rw $LOOP $SPARSE_IMAGE_MOUNT`;
+        `$MOUNT -t $IMAGE_FS_TYPE -o rw,relatime,nodiratime $LOOP $SPARSE_IMAGE_MOUNT`;
         if [ $? -ne 0 ] ; then
           logFatal "mountSparseImageRW(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readwrite";
         else
@@ -428,7 +428,7 @@ mountSparseImageRO() {
     `$MOUNT -t $IMAGE_FS_TYPE -o remount,ro,relatime,nodiratime $LOOP $SPARSE_IMAGE_MOUNT`;
     if [ $? -ne 0 ] ; then
         logWarn "mountSparseImageRO(): Trying without -o remount";
-        `$MOUNT -t $IMAGE_FS_TYPE -o ro $LOOP $SPARSE_IMAGE_MOUNT`;
+        `$MOUNT -t $IMAGE_FS_TYPE -o ro,relatime,nodiratime $LOOP $SPARSE_IMAGE_MOUNT`;
         if [ $? -ne 0 ] ; then
           logFatal "mountSparseImageRO(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readonly";
         else
