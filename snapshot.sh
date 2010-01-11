@@ -95,6 +95,7 @@ DAILY_INTERVAL_SEC=60*60*24;
 WEEKLY_INTERVAL_SEC=$DAILY_INTERVAL_SEC*7;
 
 # Logging levels
+LOG_TRACE=5;
 LOG_DEBUG=4;
 LOG_INFO=3;
 LOG_WARNING=2;
@@ -110,7 +111,7 @@ SPARSE_IMAGE_FILE=;
 #-----------------------------------------------------------------------
 #------------- User Parameters -----------------------------------------
 #-----------------------------------------------------------------------
-LOG_LEVEL=$LOG_WARNING; # see above $LOG_xxx
+LOG_LEVEL=$LOG_INFO; # see above $LOG_xxx
 SILENT=no; # no - print to console; yes - suppress console output
 IMAGE_SIZE=; # specify in M (megabytes) or G (gigabytes)
 IMAGE_FS_TYPE=; # use either ext4, ext3 or ext2 (must support hard-links)
@@ -124,6 +125,13 @@ SPARSE_IMAGE_DIR=; # directory storing image file
 echoConsole() {
     if [ $SILENT = no ]; then
         echo $1;
+    fi;
+}
+
+logDebug() {
+    if [ $LOG_LEVEL -ge $LOG_TRACE ]; then
+        echoConsole "TRACE: $*";
+        echo "`$DATE` [$$] TRACE: $*" >> $LOG_FILE;
     fi;
 }
 
@@ -487,7 +495,7 @@ makeHourlySnapshot() {
   # should have a corresponsing .exclude file.
   EXCLUDE_FILE=`$ECHO "$SOURCE" | $SED "s/\//./g"`
   EXCLUDE_FILE=$EXCLUDE_FILE.exclude
-  RSYNC_OPTS="--archive --delete --delete-excluded --sparse \
+  RSYNC_OPTS="--archive --sparse --partial --delete --delete-excluded \
       --exclude-from=$EXCLUDE_DIR/$EXCLUDE_FILE";
   if [ $LOG_LEVEL -ge $LOG_DEBUG ]; then
     RSYNC_OPTS="--verbose --progress $RSYNC_OPTS";
