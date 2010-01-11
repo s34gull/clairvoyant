@@ -28,6 +28,17 @@
 
 unset PATH
 
+#-----------------------------------------------------------------------
+#------------- User Parameters -----------------------------------------
+#-----------------------------------------------------------------------
+# LOG_LEVEL=$LOG_INFO; # change below in LOGGING section
+SILENT=no; # no - print to console; yes - suppress console output
+IMAGE_SIZE=; # specify in M (megabytes) or G (gigabytes)
+IMAGE_FS_TYPE=; # use either ext4, ext3 or ext2 (must support hard-links)
+MOUNT_OPTIONS=;
+SPARSE_IMAGE_MOUNT=; # attatch image to this mountpoint 
+SPARSE_IMAGE_DIR=; # directory storing image file
+
 # ----------------------------------------------------------------------
 # ------------- COMMANDS --------------------
 # Include external commands here for portability
@@ -53,6 +64,7 @@ PARTED=/sbin/parted;
 RM=/bin/rm;
 RSYNC=/usr/bin/rsync;
 SED=/bin/sed;
+SYNC=/bin/sync;
 LPWD=/bin/pwd;
 TOUCH=/bin/touch;
 
@@ -95,7 +107,7 @@ WEEKLY_SNAP_LIMIT=51;
 DAILY_INTERVAL_SEC=60*60*24;
 WEEKLY_INTERVAL_SEC=$DAILY_INTERVAL_SEC*7;
 
-# Logging levels
+# LOGGING levels
 LOG_TRACE=5;
 LOG_DEBUG=4;
 LOG_INFO=3;
@@ -103,22 +115,13 @@ LOG_WARNING=2;
 LOG_ERROR=1;
 LOG_FATAL=0;
 
+LOG_LEVEL=$LOG_INFO; # see above $LOG_xxx
+
 # Unset parameters (set within startup())
 SOURCES=;
 SOURCE=;
 LOOP=;
 SPARSE_IMAGE_FILE=;
-
-#-----------------------------------------------------------------------
-#------------- User Parameters -----------------------------------------
-#-----------------------------------------------------------------------
-LOG_LEVEL=$LOG_INFO; # see above $LOG_xxx
-SILENT=no; # no - print to console; yes - suppress console output
-IMAGE_SIZE=; # specify in M (megabytes) or G (gigabytes)
-IMAGE_FS_TYPE=; # use either ext4, ext3 or ext2 (must support hard-links)
-MOUNT_OPTIONS="relatime,nodiratime,data=journal,journal_checksum";
-SPARSE_IMAGE_MOUNT=; # attatch image to this mountpoint 
-SPARSE_IMAGE_DIR=; # directory storing image file
 
 #-----------------------------------------------------------------------
 #------------- FUNCTIONS -----------------------------------------------
@@ -181,7 +184,7 @@ checkUser() {
     logError "checkUser(): Sorry, must be root; exiting."; 
     exit 1;
   else
-    logInfo "checkUser(): User is root, proceeding...";
+    logDebug "checkUser(): User is root, proceeding...";
   fi;
   logInfo "checkUser(): Done.";
 }
@@ -221,8 +224,9 @@ checkFields() {
 getLock() {
   logInfo "getLock(): Beginning getLock...";
   if [ ! -d $LOCK_DIR ] ; then
-      logInfo "getLock(): Lockfile directory doesn't exist; creating $LOCK_DIR";
-      $MKDIR -p $LOCK_DIR;
+      logDebug "getLock(): Lockfile directory doesn't exist; creating $LOCK_DIR";
+      logTrace "getLock(): $MKDIR -p $LOCK_DIR >> $LOG_FILE 2>&1";
+      $MKDIR -p $LOCK_DIR >> $LOG_FILE 2>&1;
   fi;
 
   if [ $FATAL_LOCK_FILE -a -f $FATAL_LOCK_FILE ] ; then
@@ -234,25 +238,30 @@ getLock() {
       exec 0<"$LOCK_FILE";
       while read -r PID
       do 
-      logInfo "getLock():Checking for running instance of script with PID $PID";
+      logDebug "getLock():Checking for running instance of script with PID $PID";
+      logTrace "getLock(): $TEST_PROCESS $PID > /dev/null 2>&1";
       $TEST_PROCESS $PID > /dev/null 2>&1;
       if [ $? = 0 ] ; then
           # check name as well
           logError "getLock():Found running instance with PID=$PID; exiting.";
           exit 1;
       else
-          $RM $LOCK_FILE;
-          logInfo "getLock():Process $PID not found; deleting stale lockfile $LOCK_FILE";
+          logDebug "getLock():Process $PID not found; deleting stale lockfile $LOCK_FILE";
+          logTrace "getLock(): $RM $LOCK_FILE >> $LOG_FILE 2>&1";
+          $RM $LOCK_FILE >> $LOG_FILE 2>&1;
       fi;
        break;
     done
   else
-    logInfo "getLock(): Specified lockfile $LOCK_FILE not found; creating...";
-    $TOUCH $LOCK_FILE;
+    logDebug "getLock(): Specified lockfile $LOCK_FILE not found; creating...";
+    logTrace "getLock(): $TOUCH $LOCK_FILE >> $LOG_FILE 2>&1";
+    $TOUCH $LOCK_FILE >> $LOG_FILE 2>&1;
   fi;
 
   logInfo "getLock(): Recording current PID $$ in lockfile $LOCK_FILE";
+  logTrace "getLock(): echo $$ > $LOCK_FILE";
   echo $$ > $LOCK_FILE;
+
   logInfo "getLock(): Done.";
 }
 
@@ -311,57 +320,74 @@ checkWeeklyInterval() {
 # Once created, make it available via /dev/mapper via kparx.
 #-----------------------------------------------------------------------
 createSparseImage() {
+  logInfo "createSparseImage(): Creating new sparse image file for snapshots...";
 
+  logTrace "createSparseImage(): GUID=$HOSTNAME$RANDOM$DATE -u +%s";
   GUID="`$HOSTNAME`$RANDOM`$DATE -u +%s`";
+
+  logTrace "createSparseImage(): GUID=$ECHO $GUID | $HASH";
   GUID=`$ECHO $GUID | $HASH`;
+
+  logTrace "createSparseImage(): GUID=$ECHO $GUID | $CUT -d' ' -f1";
   GUID=`$ECHO $GUID | $CUT -d' ' -f1`;
+
   SPARSE_IMAGE_FILE=`$HOSTNAME`.$GUID.raw;
   $ECHO "$SPARSE_IMAGE_FILE" > $SPARSE_IMAGE_STOR;
 
-  logInfo "createSparseImage(): Creating file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE...";
+  logInfo "createSparseImage(): Initializing image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE...";
+
+  logDebug "createSparseImage(): Creating file...";
+  logTrace "createSparseImage(): $DD if=/dev/zero of=$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE bs=1 count=1 seek=$IMAGE_SIZE  >> $LOG_FILE 2>&1";
   `$DD if=/dev/zero of=$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE bs=1 count=1 seek=$IMAGE_SIZE  >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
       logFatal "createSparseImage(): Unable to create sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE; exiting.";
   fi;
-  logInfo "createSparseImage(): Creating partition...";
+  logDebug "createSparseImage(): File creation complete.";
+
+  logDebug "createSparseImage(): Creating partition...";
+  logTrace "createSparseImage(): $PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mklabel msdos  >> $LOG_FILE 2>&1";
   `$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mklabel msdos  >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
       logFatal "createSparseImage(): Unable to create partition table; exiting.";
   fi;
+  logTrace "createSparseImage(): $PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mkpart primary 0G $IMAGE_SIZE  >> $LOG_FILE 2>&1";
   `$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mkpart primary 0G $IMAGE_SIZE  >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
       logFatal "createSparseImage(): Unable to create partition; exiting.";
   fi;
+  logDebug "createSparseImage(): Partition creation complete.";
 
-  logInfo "createSparseImage(): Creating temp loopback device for initialization";
   CWD=`$LPWD`;
   cd $SPARSE_IMAGE_DIR;
-    LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE  >> $LOG_FILE 2>&1`;
+    logDebug "createSparseImage(): Creating temp loopback device for initialization...";
+    logTrace "createSparseImage(): $KPARTX -a -v $SPARSE_IMAGE_FILE";
+    LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE`;
     if [ $? -ne 0 ] ; then
         logFatal "createSparseImage(): Unable to create device mapping using $KPARTX; exiting.";
     fi;
+    logDebug "createSparseImage(): Loopback device creation complete.";
     LOOP=`$ECHO $LOOP | $CUT -d' ' -f3`;
     LOOP=/dev/mapper/$LOOP;
     $ECHO "$LOOP" > $LOOP_DEV_STOR;
   cd $CWD;
 
-  logInfo "createSparseImage(): Creating $IMAGE_FS_TYPE fs on $LOOP using $MKFS...";
-  $MKFS -t $IMAGE_FS_TYPE $LOOP  >> $LOG_FILE 2>&1;
+  logDebug "createSparseImage(): Creating $IMAGE_FS_TYPE fs on $LOOP...";
+  logTrace "createSparseImage(): $MKFS -t $IMAGE_FS_TYPE $LOOP";
+  $MKFS -t $IMAGE_FS_TYPE $LOOP;
   if [ $? -ne 0 ] ; then
       logFatal "createSparseImage(): Unable to create filesystem $IMAGE_FS_TYPE on $LOOP; exiting.";
   fi;
+  logDebug "createSparseImage(): Filesystem creation complete.";
 
-  $FSCK -t $IMAGE_FS_TYPE $LOOP -p >> $LOG_FILE 2>&1;
-  if [ $? -ne 0 ] ; then
-      logFatal "createSparseImage(): Problem detected with filesystem $IMAGE_FS_TYPE on $LOOP; exiting.";
-  fi;
 
   if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
-    logInfo "createSparseImage(): Creating mount point $SPARSE_IMAGE_MOUNT...";
+    logDebug "createSparseImage(): Creating mount point $SPARSE_IMAGE_MOUNT...";
+    logTrace "createSparseImage(): $MKDIR -p $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
     `$MKDIR -p $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
     if [ $? -ne 0 ] ; then
         logFatal "createSparseImage(): Unable to create mount point $SPARSE_IMAGE_MOUNT; exiting.";
     fi;
+    logDebug "createSparseImage(): Mount point creation done.";
   fi;
 
   logInfo "createSparseImage(): Done.";
@@ -389,13 +415,14 @@ setupLoopDevice() {
 
   if [ ! -e $LOOP ] ; then
     CWD=`$LPWD`;
-    cd $SPARSE_IMAGE_DIR;
-      LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE  >> $LOG_FILE 2>&1`;
+    cd $SPARSE_IMAGE_DIR; 
+      logDebug "setupLoopDevice(): (re)creating loop device $LOOP...";
+      logTrace "setupLoopDevice(): $KPARTX -a -v $SPARSE_IMAGE_FILE";
+      LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE`;
       if [ $? -ne 0 ] ; then
         logFatal "setupLoopDevice(): $KPARTX call failed; check $LOSETUP for available loop devices; consider rebooting to reset loop devs.";
-      else
-        logDebug "setupLoopDevice(): $KPARTX call successful.";
       fi;
+      logDebug "setupLoopDevice(): (re)creation complete.";
       LOOP=`$ECHO $LOOP | $CUT -d' ' -f3`;
       LOOP=/dev/mapper/$LOOP;
       $ECHO "$LOOP" > $LOOP_DEV_STOR;
@@ -412,47 +439,53 @@ setupLoopDevice() {
 # attempt to remount the RW mount point as RW; else abort
 #------------------------------------------------------------------------------
 mountSparseImageRW() {
-    setupLoopDevice;
-    logInfo "mountSparseImageRW(): Re-mounting $LOOP to $SPARSE_IMAGE_MOUNT in readwrite...";
-    if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
-        logFatal "mountSparseImageRW(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
-    fi;
-    `$MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
-    if [ $? -ne 0 ] ; then
-        logWarn "mountSparseImageRW(): Trying without -o remount";
-        `$MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
-        if [ $? -ne 0 ] ; then
-          logFatal "mountSparseImageRW(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readwrite";
-        else
-          logInfo "mountSparseImageRW(): Done.";
-        fi;
-    else
-      logInfo "mountSparseImageRW(): Done.";
-    fi;
-  }
+  setupLoopDevice;
+  logInfo "mountSparseImageRW(): Re-mounting $LOOP to $SPARSE_IMAGE_MOUNT in readwrite...";
+  if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
+      logFatal "mountSparseImageRW(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
+  fi;
+
+  logDebug "mountSparseImageRW(): Attempting remount...";
+  logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+  `$MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
+  if [ $? -ne 0 ] ; then
+      logWarn "mountSparseImageRW(): Trying without -o remount";
+      logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+      `$MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
+      if [ $? -ne 0 ] ; then
+        logFatal "mountSparseImageRW(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readwrite";
+      fi;
+  fi;
+  logDebug "mountSparseImageRW(): Mount complete.";
+
+  logInfo "mountSparseImageRW(): Done.";
+}
 
 #------------------------------------------------------------------------------
 # now remount the RW snapshot mountpoint as readonly
 #------------------------------------------------------------------------------
 mountSparseImageRO() {
-    setupLoopDevice;
-    logInfo "mountSparseImageRO(): Re-mounting $LOOP to $SPARSE_IMAGE_MOUNT in readonly...";
-    if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
-        logFatal "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
-    fi;
-    `$MOUNT -t $IMAGE_FS_TYPE -o remount,ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
-    if [ $? -ne 0 ] ; then
-        logWarn "mountSparseImageRO(): Trying without -o remount";
-        `$MOUNT -t $IMAGE_FS_TYPE -o ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
-        if [ $? -ne 0 ] ; then
-          logFatal "mountSparseImageRO(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readonly";
-        else
-          logInfo "mountSparseImageRO(): Done.";
-        fi;
-    else
-      logInfo "mountSparseImageRO(): Done.";
-    fi;
-  }
+  setupLoopDevice;
+  logInfo "mountSparseImageRO(): Re-mounting $LOOP to $SPARSE_IMAGE_MOUNT in readonly...";
+  if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
+      logFatal "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
+  fi;
+
+  logDebug "mountSparseImageRO(): Attempting remount...";
+  logTrace "mountSparseImageRO(): $MOUNT -t $IMAGE_FS_TYPE -o remount,ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+  `$MOUNT -t $IMAGE_FS_TYPE -o remount,ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
+  if [ $? -ne 0 ] ; then
+      logWarn "mountSparseImageRO(): Trying without -o remount";
+      logTrace "mountSparseImageRO(): $MOUNT -t $IMAGE_FS_TYPE -o ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+      `$MOUNT -t $IMAGE_FS_TYPE -o ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
+      if [ $? -ne 0 ] ; then
+        logFatal "mountSparseImageRO(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readonly";
+      fi;
+  fi;
+  logDebug "mountSparseImageRO(): Mount complete.";
+
+  logInfo "mountSparseImageRO(): Done.";
+}
 
 
 #------------------------------------------------------------------------------
@@ -463,35 +496,40 @@ makeHourlySnapshot() {
 
   # step 1: delete the oldest snapshot, if it exists:
   if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT ] ; then
-    logDebug "makeHourlySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT";
+    logDebug "makeHourlySnapshot(): Removing hourly.$HOURLY_SNAP_LIMIT...";
+    logTrace "makeHourlySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT";
     $RM -rf $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT ;
     if [ $? -ne 0 ] ; then
       logFatal "makeHourlySnapshot(): Unable to remove $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT; exiting.";
     fi;
+    logDebug "makeHourlySnapshot(): Removal complete.";
   fi ;
 
-
+  logDebug "makeHourlySnapshot(): Incrementing hourlies...";
   for (( i=$HOURLY_SNAP_LIMIT ; i>1 ; i-- ))
   do
     # step 2: shift the middle snapshots(s) back by one, if they exist
     OLD=$[$i-1];
     if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$OLD ] ; then
-      logDebug "makeHourlySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/hourly.$OLD $SPARSE_IMAGE_MOUNT/home/hourly.$i >> $LOG_FILE 2>&1";
+      logTrace "makeHourlySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/hourly.$OLD $SPARSE_IMAGE_MOUNT/home/hourly.$i >> $LOG_FILE 2>&1";
       $MV $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$OLD $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$i >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
         logFatal "makeHourlySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$OLD; exiting.";
       fi;
     fi;
   done
+  logDebug "makeHourlySnapshot(): Increment complete.";
 
   # step 3: make a hard-link-only (except for dirs) copy of the latest snapshot,
   # if that exists
   if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0 ] ; then
-    logDebug "makeHourlySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0 $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.1" >> $LOG_FILE 2>&1;
+    logDebug "makeHourlySnapshot(): Copying hourly.0...";
+    logTrace "makeHourlySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0 $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.1" >> $LOG_FILE 2>&1;
     $CP -al $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0 $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.1 >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "makeHourlySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0; exiting.";
     fi;
+    logDebug "makeHourlySnapshot(): Copy complete.";
   fi;
 
   # step 4: rsync from the system into the latest snapshot (notice that
@@ -504,10 +542,16 @@ makeHourlySnapshot() {
   EXCLUDE_FILE=$EXCLUDE_FILE.exclude
   RSYNC_OPTS="--archive --sparse --partial --delete --delete-excluded \
       --exclude-from=$EXCLUDE_DIR/$EXCLUDE_FILE";
+
   if [ $LOG_LEVEL -ge $LOG_DEBUG ]; then
-    RSYNC_OPTS="--verbose --progress $RSYNC_OPTS";
+    RSYNC_OPTS="--verbose $RSYNC_OPTS";
   fi;
-  logDebug "makeHourlySnapshot(): $RSYNC \
+
+  if [ $LOG_LEVEL -ge $LOG_TRACE ]; then
+    RSYNC_OPTS="--progress $RSYNC_OPTS";
+  fi;
+  logDebug "makeHourlySnapshot(): Performing rsync...";
+  logTrace "makeHourlySnapshot(): $RSYNC \
       $RSYNC_OPTS \
       /$SOURCE/ $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0/ >> $LOG_FILE 2>&1";
   $RSYNC \
@@ -516,9 +560,10 @@ makeHourlySnapshot() {
   if [ $? -ne 0 ] ; then
     logError "makeHourlySnapshot(): rsync encountered an error - continuing";
   fi;
+  logDebug "makeHourlySnapshot(): rsync complete.";
 
   # step 5: update the mtime of hourly.0 to reflect the snapshot time
-  logDebug "makeHourlySnapshot(): $TOUCH $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0/";
+  logTrace "makeHourlySnapshot(): $TOUCH $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0/";
   $TOUCH $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0/ ;
 
   # TODO implement cleanup for cases where rsync failed; 
@@ -534,41 +579,47 @@ makeHourlySnapshot() {
 rotateDailySnapshot() {
   logInfo "rotateDailySnapshot(): Beginning rotateDailySnapshot...";
   if [ ! -d $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT ] ; then
+        logDebug "rotateDailySnapshot(): ";
         logWarn "rotateDailySnapshot(): Unable to begin daily rotate because the $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT file doesn't exist; returning ..."
         return 1;
   fi;
 
   # step 1: delete the oldest snapshot, if it exists:
   if [ -d $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT ] ; then
-    logDebug "rotateDailySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT >> $LOG_FILE 2>&1;";
+    logDebug "rotateDailySnapshot(): Removing daily.$DAILY_SNAP_LIMIT...";
+    logTrace "rotateDailySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT >> $LOG_FILE 2>&1;";
     $RM -rf $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "rotateDailySnapshot(): Unable to remove $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT; exiting.";
     fi;
+    logDebug "rotateDailySnapshot(): Removal complete.";
   fi ;
 
-
+  logDebug "rotateDailySnapshot(): Incrementing dailies...";
   for (( i=$DAILY_SNAP_LIMIT ; i>0 ; i-- ))
   do
     # step 2: shift the middle snapshots(s) back by one, if they exist
     OLD=$[$i-1]
     if [ -d $SPARSE_IMAGE_MOUNT/home/daily.$OLD ] ; then
-      logDebug "rotateDailySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/daily.$OLD $SPARSE_IMAGE_MOUNT/home/daily.$i >> $LOG_FILE 2>&1;";
+      logTrace "rotateDailySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/daily.$OLD $SPARSE_IMAGE_MOUNT/home/daily.$i >> $LOG_FILE 2>&1;";
       $MV $SPARSE_IMAGE_MOUNT/home/daily.$OLD $SPARSE_IMAGE_MOUNT/home/daily.$i >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
         logFatal "rotateDailySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/home/daily.$OLD; exiting.";
       fi;
     fi;
   done
+  logDebug "rotateDailySnapshot(): Increment complete.";
 
   # step 3: make a hard-link-only (except for dirs) copy of
   # hourly.3, assuming that exists, into daily.0
   if [ -d $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT ] ; then
-    logDebug "rotateDailySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/daily.0 >> $LOG_FILE 2>&1;";
+    logDebug "rotateDailySnapshot(): Copying hourly.$HOURLY_SNAP_LIMIT to daily.0...";
+    logTrace "rotateDailySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/daily.0 >> $LOG_FILE 2>&1;";
     $CP -al $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/daily.0 >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "rotateDailySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT; exiting.";
     fi;
+    logDebug "rotateDailySnapshot(): Copy complete.";
     $TOUCH $DAILY_LAST;
     $ECHO "`$DATE -u +%s`" > $DAILY_LAST;
   fi;
@@ -588,33 +639,40 @@ rotateWeeklySnapshot() {
 
   # step 1: delete the oldest snapshot, if it exists:
   if [ -d $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT ] ; then
-    logDebug "rotateWeeklySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT >> $LOG_FILE 2>&1;";
+    logDebug "rotateWeeklySnapshot(): Removing weekly.$WEEKLY_SNAP_LIMIT...";
+    logTrace "rotateWeeklySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT >> $LOG_FILE 2>&1;";
     $RM -rf $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "rotateWeeklySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT; exiting.";
     fi;
+    logDebug "rotateWeeklySnapshot(): Removal complete.";
   fi ;
 
+  logDebug "rotateWeeklySnapshot(): Incrementing weeklies...";
   for (( i=$WEEKLY_SNAP_LIMIT ; i>0 ; i-- ))
   do
     # step 2: shift the middle snapshots(s) back by one, if they exist
     OLD=$[$i-1]
     if [ -d $SPARSE_IMAGE_MOUNT/home/weekly.$OLD ] ; then
-      logDebug "rotateWeeklySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/weekly.$OLD $SPARSE_IMAGE_MOUNT/home/weekly.$i >> $LOG_FILE 2>&1;";
+      logTrace "rotateWeeklySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/weekly.$OLD $SPARSE_IMAGE_MOUNT/home/weekly.$i >> $LOG_FILE 2>&1;";
       $MV $SPARSE_IMAGE_MOUNT/home/weekly.$OLD $SPARSE_IMAGE_MOUNT/home/weekly.$i >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
         logFatal "rotateWeeklySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/home/weekly.$OLD; exiting.";
       fi;
     fi;
   done
+  logDebug "rotateWeeklySnapshot(): Increment complete";
+
   # step 3: make a hard-link-only (except for dirs) copy of
   # daily.2, assuming that exists, into weekly.0
   if [ -d $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT ] ; then
-    logDebug "rotateWeeklySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/weekly.0 >> $LOG_FILE 2>&1;";
+    logDebug "rotateWeeklySnapshot(): Copying daily.$DAILY_SNAP_LIMIT to weekly.0...";
+    logTrace "rotateWeeklySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/weekly.0 >> $LOG_FILE 2>&1;";
     $CP -al $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/weekly.0 >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "rotateWeeklySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT; exiting.";
     fi;
+    logDebug "rotateWeeklySnapshot(): Copy complete.";
     $TOUCH $WEEKLY_LAST;
     $ECHO "`$DATE -u +%s`" > $WEEKLY_LAST;
   fi;
@@ -643,7 +701,7 @@ startup() {
       break;
     done;
   else
-    logInfo "startup(): No sparse image file defined; creating new...";
+    logDebug "startup(): No sparse image file defined; creating new...";
     createSparseImage;
   fi;
 
@@ -666,8 +724,9 @@ startup() {
     for SOURCE in $SOURCES
     do
       if [ ! -d $SPARSE_IMAGE_MOUNT/$SOURCE ] ; then
-        logInfo "startup(): Creating new snapshot directory $SPARSE_IMAGE_MOUNT/$SOURCE";
-        $MKDIR -p $SPARSE_IMAGE_MOUNT/$SOURCE;
+        logDebug "startup(): Creating new snapshot directory $SPARSE_IMAGE_MOUNT/$SOURCE";
+        logTrace "startup(): $MKDIR -p $SPARSE_IMAGE_MOUNT/$SOURCE >> $LOG_FILE 2>&1";
+        $MKDIR -p $SPARSE_IMAGE_MOUNT/$SOURCE >> $LOG_FILE 2>&1;
       fi;
       logDebug "startup(): Will take snapshot of /$SOURCE.";
     done;
@@ -682,9 +741,17 @@ startup() {
 # delete $LOCK_FILE and mount readonly
 #------------------------------------------------------------------------------
 shutdown() {
+  logInfo "shutdown(): Shutting down...";
+
   mountSparseImageRO;
-  logInfo "shutdown(): Removing lock file $LOCK_FILE..."
+
+  logDebug "shutdown(): Removing lock file $LOCK_FILE..."
   $RM $LOCK_FILE
+  
+  logDebug "shutdown(): Syncing filesystem...";
+  $SYNC; #ensure that changes to the backup imsage file are written-out
+
+  logInfo "shutdown(): Done.";
 }
 
 #------------------------------------------------------------------------------
