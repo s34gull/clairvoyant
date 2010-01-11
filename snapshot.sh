@@ -38,6 +38,7 @@ CUT=/usr/bin/cut;
 DD=/bin/dd;
 DATE=/bin/date;
 ECHO=/bin/echo;
+FSCK=/sbin/fsck;
 HASH=/usr/bin/md5sum;
 HOSTNAME=/bin/hostname;
 ID=/usr/bin/id;
@@ -115,6 +116,7 @@ LOG_LEVEL=$LOG_INFO; # see above $LOG_xxx
 SILENT=no; # no - print to console; yes - suppress console output
 IMAGE_SIZE=; # specify in M (megabytes) or G (gigabytes)
 IMAGE_FS_TYPE=; # use either ext4, ext3 or ext2 (must support hard-links)
+MOUNT_OPTIONS="relatime,nodiratime,data=journal,journal_checksum";
 SPARSE_IMAGE_MOUNT=; # attatch image to this mountpoint 
 SPARSE_IMAGE_DIR=; # directory storing image file
 
@@ -128,7 +130,7 @@ echoConsole() {
     fi;
 }
 
-logDebug() {
+logTrace() {
     if [ $LOG_LEVEL -ge $LOG_TRACE ]; then
         echoConsole "TRACE: $*";
         echo "`$DATE` [$$] TRACE: $*" >> $LOG_FILE;
@@ -317,16 +319,16 @@ createSparseImage() {
   $ECHO "$SPARSE_IMAGE_FILE" > $SPARSE_IMAGE_STOR;
 
   logInfo "createSparseImage(): Creating file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE...";
-  `$DD if=/dev/zero of=$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE bs=1 count=1 seek=$IMAGE_SIZE`;
+  `$DD if=/dev/zero of=$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE bs=1 count=1 seek=$IMAGE_SIZE  >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
       logFatal "createSparseImage(): Unable to create sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE; exiting.";
   fi;
   logInfo "createSparseImage(): Creating partition...";
-  `$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mklabel msdos`;
+  `$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mklabel msdos  >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
       logFatal "createSparseImage(): Unable to create partition table; exiting.";
   fi;
-  `$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mkpart primary 0G $IMAGE_SIZE`;
+  `$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mkpart primary 0G $IMAGE_SIZE  >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
       logFatal "createSparseImage(): Unable to create partition; exiting.";
   fi;
@@ -334,7 +336,7 @@ createSparseImage() {
   logInfo "createSparseImage(): Creating temp loopback device for initialization";
   CWD=`$LPWD`;
   cd $SPARSE_IMAGE_DIR;
-    LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE`;
+    LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE  >> $LOG_FILE 2>&1`;
     if [ $? -ne 0 ] ; then
         logFatal "createSparseImage(): Unable to create device mapping using $KPARTX; exiting.";
     fi;
@@ -344,14 +346,19 @@ createSparseImage() {
   cd $CWD;
 
   logInfo "createSparseImage(): Creating $IMAGE_FS_TYPE fs on $LOOP using $MKFS...";
-  $MKFS -t $IMAGE_FS_TYPE $LOOP;
+  $MKFS -t $IMAGE_FS_TYPE $LOOP  >> $LOG_FILE 2>&1;
   if [ $? -ne 0 ] ; then
       logFatal "createSparseImage(): Unable to create filesystem $IMAGE_FS_TYPE on $LOOP; exiting.";
   fi;
 
+  $FSCK -t $IMAGE_FS_TYPE $LOOP -p >> $LOG_FILE 2>&1;
+  if [ $? -ne 0 ] ; then
+      logFatal "createSparseImage(): Problem detected with filesystem $IMAGE_FS_TYPE on $LOOP; exiting.";
+  fi;
+
   if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
     logInfo "createSparseImage(): Creating mount point $SPARSE_IMAGE_MOUNT...";
-    `$MKDIR -p $SPARSE_IMAGE_MOUNT`;
+    `$MKDIR -p $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
     if [ $? -ne 0 ] ; then
         logFatal "createSparseImage(): Unable to create mount point $SPARSE_IMAGE_MOUNT; exiting.";
     fi;
@@ -383,7 +390,7 @@ setupLoopDevice() {
   if [ ! -e $LOOP ] ; then
     CWD=`$LPWD`;
     cd $SPARSE_IMAGE_DIR;
-      LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE`;
+      LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE  >> $LOG_FILE 2>&1`;
       if [ $? -ne 0 ] ; then
         logFatal "setupLoopDevice(): $KPARTX call failed; check $LOSETUP for available loop devices; consider rebooting to reset loop devs.";
       else
@@ -410,10 +417,10 @@ mountSparseImageRW() {
     if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
         logFatal "mountSparseImageRW(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
     fi;
-    `$MOUNT -t $IMAGE_FS_TYPE -o remount,rw,relatime,nodiratime $LOOP $SPARSE_IMAGE_MOUNT`;
+    `$MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
     if [ $? -ne 0 ] ; then
         logWarn "mountSparseImageRW(): Trying without -o remount";
-        `$MOUNT -t $IMAGE_FS_TYPE -o rw,relatime,nodiratime $LOOP $SPARSE_IMAGE_MOUNT`;
+        `$MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
         if [ $? -ne 0 ] ; then
           logFatal "mountSparseImageRW(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readwrite";
         else
@@ -433,10 +440,10 @@ mountSparseImageRO() {
     if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
         logFatal "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
     fi;
-    `$MOUNT -t $IMAGE_FS_TYPE -o remount,ro,relatime,nodiratime $LOOP $SPARSE_IMAGE_MOUNT`;
+    `$MOUNT -t $IMAGE_FS_TYPE -o remount,ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
     if [ $? -ne 0 ] ; then
         logWarn "mountSparseImageRO(): Trying without -o remount";
-        `$MOUNT -t $IMAGE_FS_TYPE -o ro,relatime,nodiratime $LOOP $SPARSE_IMAGE_MOUNT`;
+        `$MOUNT -t $IMAGE_FS_TYPE -o ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
         if [ $? -ne 0 ] ; then
           logFatal "mountSparseImageRO(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readonly";
         else
