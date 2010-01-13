@@ -1,0 +1,31 @@
+README for vboxheadless
+
+vboxheadless is a collection of scripts that work with with Ubuntu's 
+service manager. It consists of the following files:
+   * vboxheadless [install in /etc/init.d]
+   * start_vboxheadless.sh [install in /usr/local/bin]
+   * start_vboxheadless_wrapper.sh [install in /usr/local/bin]
+   * stop_vboxheadless.sh [install in /usr/local/bin]
+   * stop_vboxheadless_wrapper.sh [install in /usr/local/bin]
+
+You will need to create the following configuration file
+   * /etc/vbox/headless.config
+
+It MUST have the format [VM VRDP-Server-State VRDP-Server-Port] with no
+comments:
+<some-vm-name> <config|on|off> [<vrdp-port>]
+
+An example file might look like:
+my-vm-1 config
+my-other-vm-2 on 3389
+my-final-vm-3 off 
+
+Each VM will be a separate line. Only include a port if you have 
+specified the VRDP-Server-State as "on" (otherwise it will be ignored).
+
+Once the files have been installed and creatd, you'll need to run
+   `sudo update-rc.d vboxheadless defaults 90` 
+
+from a terminal. This will ensure that the vboxheadless script will be 
+setup for startup/shutdown in all non-single-user runlevels, after the 
+VirtualBox vboxdrv script has run (K20vboxdrv).
