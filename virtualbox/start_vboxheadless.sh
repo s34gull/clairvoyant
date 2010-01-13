@@ -23,10 +23,13 @@ do
     OPTS="$OPTS --vrdp $RDP_STATE";
     if [ $RDP_STATE = on ] ; then
       OPTS="$OPTS --vrdpport $RDP_PORT";
+      # if 'off' or 'config' then don't specify a port
     fi;
+    # if the state is 'saved' then it is immutable, so don't pass any options
   fi;
+
   if [ $STATE != running ] ; then
-    echo "$PREFIX: Starting VirtualBox VM $VMNAME $OPTS...";
+    echo "$PREFIX: Starting VirtualBox VM with VBoxHeadless $OPTS...";
     eval "nohup VBoxHeadless $OPTS &";
   fi;
 done;

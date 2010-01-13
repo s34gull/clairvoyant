@@ -14,14 +14,13 @@ exec 0<"$CONFIG";
 while read -r SERVER;
 do
   VMNAME=`echo $SERVER | cut -d ' ' -f1`;
-  SLEPT=0;
   STATE=$(VBoxManage showvminfo $VMNAME --machinereadable | grep 'VMState=' | cut -d '=' -f2);
   STATE=`echo $STATE | sed "s/\"//g"`;
   echo "$PREFIX: VirtualBox VM $VMNAME in VMState=$STATE."; 
   if [ $STATE != saved ] && [ $STATE != poweroff ] ; then
     echo "$PREFIX: Suspending VirtualBox VM $VMNAME...";
-    VBoxManage controlvm $VMNAME savestate;
-    echo "$PREFIX: VirtualBox VM $VMNAME now in VMState=$STATE after $SLEPT seconds."; 
+    VBoxManage controlvm $VMNAME savestate; # call blocks until complete so no looping
+    echo "$PREFIX: VirtualBox VM $VMNAME now in VMState=$STATE."; 
   fi;
 done;
 
