@@ -239,20 +239,21 @@ getLock() {
       exec 0<"$LOCK_FILE";
       while read -r PID
       do 
-      logDebug "getLock():Checking for running instance of script with PID $PID";
-      logTrace "getLock(): $TEST_PROCESS $PID > /dev/null 2>&1";
-      $TEST_PROCESS $PID > /dev/null 2>&1;
-      if [ $? = 0 ] ; then
-          # check name as well
-          logError "getLock():Found running instance with PID=$PID; exiting.";
-          exit 1;
-      else
-          logDebug "getLock():Process $PID not found; deleting stale lockfile $LOCK_FILE";
-          logTrace "getLock(): $RM $LOCK_FILE >> $LOG_FILE 2>&1";
-          $RM $LOCK_FILE >> $LOG_FILE 2>&1;
-      fi;
-       break;
-    done
+        logDebug "getLock():Checking for running instance of script with PID $PID";
+        logTrace "getLock(): $TEST_PROCESS $PID > /dev/null 2>&1";
+        $TEST_PROCESS $PID > /dev/null 2>&1;
+        if [ $? = 0 ] ; then
+            # check name as well
+            logError "getLock():Found running instance with PID=$PID; exiting.";
+            exit 1;
+        else
+            logDebug "getLock():Process $PID not found; deleting stale lockfile $LOCK_FILE";
+            logTrace "getLock(): $RM $LOCK_FILE >> $LOG_FILE 2>&1";
+            $RM $LOCK_FILE >> $LOG_FILE 2>&1;
+        fi;
+        break;
+      done;
+      exec 0<&3;
   else
     logDebug "getLock(): Specified lockfile $LOCK_FILE not found; creating...";
     logTrace "getLock(): $TOUCH $LOCK_FILE >> $LOG_FILE 2>&1";
@@ -283,7 +284,8 @@ checkDailyInterval() {
         logInfo "checkDailyInterval(): Will perform daily rotate.";
       fi;
       break;
-    done
+    done;
+    exec 0<&3;
   else
     logInfo "checkDailyInterval(): File $DAILY_LAST not found; will attempt daily rotate.";
   fi;
@@ -307,7 +309,8 @@ checkWeeklyInterval() {
         logInfo "checkWeeklyInterval(): Will perform weekly rotate.";
       fi;
       break;
-    done
+    done;
+    exec 0<&3;
   else
     logInfo "checkWeeklyInterval(): File $WEEKLY_LAST not found; will attempt weekly rotate.";
   fi;
@@ -409,6 +412,7 @@ setupLoopDevice() {
         logDebug "setupLoopDevice(): Read loop device from file ($LOOP)";
         break;
       done;
+      exec 0<&3;
     else
       logFatal "setupLoopDevice(): Could not read loop device from file $LOOP_DEV_STOR; exiting.";
     fi;
@@ -701,6 +705,7 @@ startup() {
       logDebug "startup(): Sparse image file info read from file $SPARSE_IMAGE_FILE";
       break;
     done;
+    exec 0<&3;
   else
     logDebug "startup(): No sparse image file defined; creating new...";
     createSparseImage;
@@ -721,8 +726,9 @@ startup() {
   mountSparseImageRW;
 
   if [ $INCLUDES -a -f $INCLUDES -a -s $INCLUDES ] ; then
-    SOURCES=`$CAT $INCLUDES`;
-    for SOURCE in $SOURCES
+    exec 3<&0;
+    exec 0<"$INCLUDES";
+    while read -r SOURCE;
     do
       if [ ! -d $SPARSE_IMAGE_MOUNT/$SOURCE ] ; then
         logDebug "startup(): Creating new snapshot directory $SPARSE_IMAGE_MOUNT/$SOURCE";
@@ -731,6 +737,7 @@ startup() {
       fi;
       logDebug "startup(): Will take snapshot of /$SOURCE.";
     done;
+    exec 0<&3;
   else
     logFatal "startup(): Source listing is empty; verify entries in $INCLUDES";
   fi;
@@ -763,7 +770,9 @@ main() {
 
   startup;
 
-  for SOURCE in $SOURCES
+  exec 3<&0;
+  exec 0<"$INCLUDES";
+  while read -r SOURCE;
   do
     logInfo "main(): Taking snapshot of /$SOURCE...";
     if [ $PERFORM_WEEKLY_ROTATE = yes ] ; then
@@ -785,6 +794,7 @@ main() {
 
     logInfo "main(): Completed snapshot of /$SOURCE.";
   done;
+  exec 0<&3;
 
   shutdown;
 
