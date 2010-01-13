@@ -447,12 +447,12 @@ mountSparseImageRW() {
   fi;
 
   logDebug "mountSparseImageRW(): Attempting remount...";
-  logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o remount,rw,sync,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
-  `$MOUNT -t $IMAGE_FS_TYPE -o remount,rw,sync,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
+  logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+  `$MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
       logWarn "mountSparseImageRW(): Trying without -o remount";
-      logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o rw,sync,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
-      `$MOUNT -t $IMAGE_FS_TYPE -o rw,sync,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
+      logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+      `$MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
       if [ $? -ne 0 ] ; then
         logFatal "mountSparseImageRW(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readwrite";
       fi;
