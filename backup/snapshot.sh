@@ -516,7 +516,7 @@ makeHourlySnapshot() {
     # step 2: shift the middle snapshots(s) back by one, if they exist
     OLD=$[$i-1];
     if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$OLD ] ; then
-      logTrace "makeHourlySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/hourly.$OLD $SPARSE_IMAGE_MOUNT/home/hourly.$i >> $LOG_FILE 2>&1";
+      logTrace "makeHourlySnapshot(): $MV $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$OLD $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$i >> $LOG_FILE 2>&1";
       $MV $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$OLD $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$i >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
         logFatal "makeHourlySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$OLD; exiting.";
@@ -583,19 +583,19 @@ makeHourlySnapshot() {
 #------------------------------------------------------------------------------
 rotateDailySnapshot() {
   logInfo "rotateDailySnapshot(): Beginning rotateDailySnapshot...";
-  if [ ! -d $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT ] ; then
+  if [ ! -d $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT ] ; then
         logDebug "rotateDailySnapshot(): ";
-        logWarn "rotateDailySnapshot(): Unable to begin daily rotate because the $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT file doesn't exist; returning ..."
+        logWarn "rotateDailySnapshot(): Unable to begin daily rotate because the $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT file doesn't exist; returning ..."
         return 1;
   fi;
 
   # step 1: delete the oldest snapshot, if it exists:
-  if [ -d $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT ] ; then
+  if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT ] ; then
     logDebug "rotateDailySnapshot(): Removing daily.$DAILY_SNAP_LIMIT...";
-    logTrace "rotateDailySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT >> $LOG_FILE 2>&1;";
-    $RM -rf $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT >> $LOG_FILE 2>&1;
+    logTrace "rotateDailySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT >> $LOG_FILE 2>&1;";
+    $RM -rf $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
-      logFatal "rotateDailySnapshot(): Unable to remove $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT; exiting.";
+      logFatal "rotateDailySnapshot(): Unable to remove $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT; exiting.";
     fi;
     logDebug "rotateDailySnapshot(): Removal complete.";
   fi ;
@@ -605,11 +605,11 @@ rotateDailySnapshot() {
   do
     # step 2: shift the middle snapshots(s) back by one, if they exist
     OLD=$[$i-1]
-    if [ -d $SPARSE_IMAGE_MOUNT/home/daily.$OLD ] ; then
-      logTrace "rotateDailySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/daily.$OLD $SPARSE_IMAGE_MOUNT/home/daily.$i >> $LOG_FILE 2>&1;";
-      $MV $SPARSE_IMAGE_MOUNT/home/daily.$OLD $SPARSE_IMAGE_MOUNT/home/daily.$i >> $LOG_FILE 2>&1;
+    if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$OLD ] ; then
+      logTrace "rotateDailySnapshot(): $MV $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$OLD $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$i >> $LOG_FILE 2>&1;";
+      $MV $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$OLD $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$i >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
-        logFatal "rotateDailySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/home/daily.$OLD; exiting.";
+        logFatal "rotateDailySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$OLD; exiting.";
       fi;
     fi;
   done
@@ -617,12 +617,12 @@ rotateDailySnapshot() {
 
   # step 3: make a hard-link-only (except for dirs) copy of
   # hourly.3, assuming that exists, into daily.0
-  if [ -d $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT ] ; then
+  if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT ] ; then
     logDebug "rotateDailySnapshot(): Copying hourly.$HOURLY_SNAP_LIMIT to daily.0...";
-    logTrace "rotateDailySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/daily.0 >> $LOG_FILE 2>&1;";
-    $CP -al $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/daily.0 >> $LOG_FILE 2>&1;
+    logTrace "rotateDailySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/$SOURCE/daily.0 >> $LOG_FILE 2>&1;";
+    $CP -al $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/$SOURCE/daily.0 >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
-      logFatal "rotateDailySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/home/hourly.$HOURLY_SNAP_LIMIT; exiting.";
+      logFatal "rotateDailySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT; exiting.";
     fi;
     logDebug "rotateDailySnapshot(): Copy complete.";
     $TOUCH $DAILY_LAST;
@@ -637,18 +637,18 @@ rotateDailySnapshot() {
 #------------------------------------------------------------------------------
 rotateWeeklySnapshot() {
   logInfo "rotateWeeklySnapshot(): Beginning rotateWeeklySnapshot...";
-  if [ ! -d $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT ] ; then
-        logWarn "rotateDailySnapshot(): Unable to begin weekly rotate because the $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT file doesn't exist; returning ..."
+  if [ ! -d $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT ] ; then
+        logWarn "rotateWeeklySnapshot(): Unable to begin weekly rotate because the $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT file doesn't exist; returning ..."
         return 1;
   fi;
 
   # step 1: delete the oldest snapshot, if it exists:
-  if [ -d $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT ] ; then
+  if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.$WEEKLY_SNAP_LIMIT ] ; then
     logDebug "rotateWeeklySnapshot(): Removing weekly.$WEEKLY_SNAP_LIMIT...";
-    logTrace "rotateWeeklySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT >> $LOG_FILE 2>&1;";
-    $RM -rf $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT >> $LOG_FILE 2>&1;
+    logTrace "rotateWeeklySnapshot(): $RM -rf $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.$WEEKLY_SNAP_LIMIT >> $LOG_FILE 2>&1;";
+    $RM -rf $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.$WEEKLY_SNAP_LIMIT >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
-      logFatal "rotateWeeklySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/home/weekly.$WEEKLY_SNAP_LIMIT; exiting.";
+      logFatal "rotateWeeklySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.$WEEKLY_SNAP_LIMIT; exiting.";
     fi;
     logDebug "rotateWeeklySnapshot(): Removal complete.";
   fi ;
@@ -658,11 +658,11 @@ rotateWeeklySnapshot() {
   do
     # step 2: shift the middle snapshots(s) back by one, if they exist
     OLD=$[$i-1]
-    if [ -d $SPARSE_IMAGE_MOUNT/home/weekly.$OLD ] ; then
-      logTrace "rotateWeeklySnapshot(): $MV $SPARSE_IMAGE_MOUNT/home/weekly.$OLD $SPARSE_IMAGE_MOUNT/home/weekly.$i >> $LOG_FILE 2>&1;";
-      $MV $SPARSE_IMAGE_MOUNT/home/weekly.$OLD $SPARSE_IMAGE_MOUNT/home/weekly.$i >> $LOG_FILE 2>&1;
+    if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.$OLD ] ; then
+      logTrace "rotateWeeklySnapshot(): $MV $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.$OLD $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.$i >> $LOG_FILE 2>&1;";
+      $MV $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.$OLD $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.$i >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
-        logFatal "rotateWeeklySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/home/weekly.$OLD; exiting.";
+        logFatal "rotateWeeklySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.$OLD; exiting.";
       fi;
     fi;
   done
@@ -670,12 +670,12 @@ rotateWeeklySnapshot() {
 
   # step 3: make a hard-link-only (except for dirs) copy of
   # daily.2, assuming that exists, into weekly.0
-  if [ -d $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT ] ; then
+  if [ -d $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT ] ; then
     logDebug "rotateWeeklySnapshot(): Copying daily.$DAILY_SNAP_LIMIT to weekly.0...";
-    logTrace "rotateWeeklySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/weekly.0 >> $LOG_FILE 2>&1;";
-    $CP -al $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/home/weekly.0 >> $LOG_FILE 2>&1;
+    logTrace "rotateWeeklySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.0 >> $LOG_FILE 2>&1;";
+    $CP -al $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT $SPARSE_IMAGE_MOUNT/$SOURCE/weekly.0 >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
-      logFatal "rotateWeeklySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/home/daily.$DAILY_SNAP_LIMIT; exiting.";
+      logFatal "rotateWeeklySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT; exiting.";
     fi;
     logDebug "rotateWeeklySnapshot(): Copy complete.";
     $TOUCH $WEEKLY_LAST;
