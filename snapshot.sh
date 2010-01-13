@@ -35,7 +35,8 @@ unset PATH
 SILENT=no; # no - print to console; yes - suppress console output
 IMAGE_SIZE=; # specify in M (megabytes) or G (gigabytes)
 IMAGE_FS_TYPE=; # use either ext4, ext3 or ext2 (must support hard-links)
-MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime,sync"; # use sync to avoid buffering the writes
+DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime,sync"; # use sync to avoid buffering the writes
+MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS"; # append fstype options here
 SPARSE_IMAGE_MOUNT=; # attatch image to this mountpoint 
 SPARSE_IMAGE_DIR=; # directory storing image file
 
