@@ -33,5 +33,5 @@ do
     eval "nohup VBoxHeadless $OPTS &";
   fi;
 done;
-
+exec 0<&3;
 exit 0;
