@@ -35,7 +35,7 @@ unset PATH
 SILENT=no; # no - print to console; yes - suppress console output
 IMAGE_SIZE=; # specify in M (megabytes) or G (gigabytes)
 IMAGE_FS_TYPE=; # use either ext4, ext3 or ext2 (must support hard-links)
-DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime,sync"; # use sync to avoid buffering the writes
+DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime"; 
 MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS"; # append fstype options here
 SPARSE_IMAGE_MOUNT=; # attatch image to this mountpoint 
 SPARSE_IMAGE_DIR=; # directory storing image file
@@ -447,11 +447,11 @@ mountSparseImageRW() {
   fi;
 
   logDebug "mountSparseImageRW(): Attempting remount...";
-  logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+  logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o remount,rw,sync,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
   `$MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
       logWarn "mountSparseImageRW(): Trying without -o remount";
-      logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+      logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o remount,rw,sync,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
       `$MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
       if [ $? -ne 0 ] ; then
         logFatal "mountSparseImageRW(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readwrite";
