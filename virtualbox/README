@@ -24,6 +24,8 @@ my-final-vm-3 off
 
 Each VM will be a separate line. Only include a port if you have 
 specified the VRDP-Server-State as "on" (otherwise it will be ignored).
+The recommended value for VRDP-Server-State is 'config'. See 
+'man VBoxHeadless' for more information.
 
 You MUST provide values for $USERAS and $LOG in the *_wrapper.sh scripts.
    * $USERAS controls the user as whom root will execute the start/stop.
