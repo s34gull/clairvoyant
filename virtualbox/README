@@ -1,7 +1,9 @@
 README for vboxheadless
 
 vboxheadless is a collection of scripts that work with with Ubuntu's 
-service manager. It consists of the following files:
+service manager to start/resume poweroff/saved VMs and suspend 
+running/paused VMs on startup and shutdown of ths host. It consists of 
+the following files:
    * vboxheadless [install in /etc/init.d]
    * start_vboxheadless.sh [install in /usr/local/bin]
    * start_vboxheadless_wrapper.sh [install in /usr/local/bin]
@@ -23,7 +25,13 @@ my-final-vm-3 off
 Each VM will be a separate line. Only include a port if you have 
 specified the VRDP-Server-State as "on" (otherwise it will be ignored).
 
-Once the files have been installed and creatd, you'll need to run
+You MUST provide values for $USERAS and $LOG in the *_wrapper.sh scripts.
+   * $USERAS controls the user as whom root will execute the start/stop.
+     This user must own the named VMs and they must exist in the
+     ~$USERAS/.VirtualBox/VirtualBox.xml file
+   * $LOG destination for all script output 
+
+Once the files have been installed and configured, you'll need to run
    `sudo update-rc.d vboxheadless defaults 90` 
 
 from a terminal. This will ensure that the vboxheadless script will be 
