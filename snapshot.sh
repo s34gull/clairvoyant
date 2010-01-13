@@ -36,7 +36,7 @@ SILENT=no; # no - print to console; yes - suppress console output
 IMAGE_SIZE=; # specify in M (megabytes) or G (gigabytes)
 IMAGE_FS_TYPE=; # use either ext4, ext3 or ext2 (must support hard-links)
 DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime"; 
-MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS"; # append fstype options here
+MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS"; # append FS options here
 SPARSE_IMAGE_MOUNT=; # attatch image to this mountpoint 
 SPARSE_IMAGE_DIR=; # directory storing image file
 
