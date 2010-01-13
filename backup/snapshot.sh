@@ -1,6 +1,6 @@
 #!/bin/bash
 # ----------------------------------------------------------------------
-# clairvoyant
+# snapshot
 # ----------------------------------------------------------------------
 # Creates a rotating snapshot of the contents of $INCLUDES whenever 
 # called (minus the contents of the .exlude files). Snapshots are 
