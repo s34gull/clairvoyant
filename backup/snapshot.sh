@@ -53,6 +53,7 @@ CUT=/usr/bin/cut;
 DD=/bin/dd;
 DATE=/bin/date;
 ECHO=/bin/echo;
+EXPR=/usr/bin/expr;
 FSCK=/sbin/fsck;
 HASH=/usr/bin/md5sum;
 HOSTNAME=/bin/hostname;
@@ -110,17 +111,17 @@ DAILY_SNAP_LIMIT=29;
 WEEKLY_SNAP_LIMIT=51;
 
 # Time definitions
-HOUR_SEC=`expr "60" "*" "60"`; # seconds per hourl
-DAY_SEC=`expr "$HOUR_SEC" "*" "24"`; # seconds per day
-WEEK_SEC=`expr "$DAY_SEC" "*" "7"`;
+HOUR_SEC=`$EXPR "60" "*" "60"`; # seconds per hourl
+DAY_SEC=`$EXPR "$HOUR_SEC" "*" "24"`; # seconds per day
+WEEK_SEC=`$EXPR "$DAY_SEC" "*" "7"`;
 
 # Computed Time intervals (in seconds)
 # default is one hour, minus 10% for cron miss
-HOURLY_INTERVAL_SEC=`expr "$HOUR_SEC" "*" "$HOUR_INTERVAL" "-" "$HOUR_SEC" "/" "10"`; 
+HOURLY_INTERVAL_SEC=`$EXPR "$HOUR_SEC" "*" "$HOUR_INTERVAL" "-" "$HOUR_SEC" "/" "10"`; 
 # default is one day, minus 10% for cron miss
-DAILY_INTERVAL_SEC=`expr "$DAY_SEC" "*" "$DAY_INTERVAL" "-" "$DAY_SEC" "/" "10"`; 
+DAILY_INTERVAL_SEC=`$EXPR "$DAY_SEC" "*" "$DAY_INTERVAL" "-" "$DAY_SEC" "/" "10"`; 
 # default is one week, minus 10% for cron miss
-WEEKLY_INTERVAL_SEC=`expr "$WEEK_SEC" "*" "$WEEK_INTERVAL" "-" "$WEEK_SEC" "/" "10"`;
+WEEKLY_INTERVAL_SEC=`$EXPR "$WEEK_SEC" "*" "$WEEK_INTERVAL" "-" "$WEEK_SEC" "/" "10"`;
 
 # LOGGING levels
 LOG_TRACE=5;
@@ -297,7 +298,7 @@ checkHourlyInterval() {
     while read -r LAST;
     do 
       if (( `$DATE -u +%s` < $[$LAST+$HOURLY_INTERVAL_SEC] )) ; then
-        logInfo "checkHourlyInterval(): Will not perform hourly rotate; last hourly rotate occurred within $($HOURLY_INTERVAL_SEC/$HOUR_SEC) hours.";
+        logInfo "checkHourlyInterval(): Will not perform hourly rotate; last hourly rotate occurred within $HOUR_INTERVAL hours.";
         PERFORM_HOURLY_SNAPSHOT=no;
       else
         logInfo "checkHourlyInterval(): Will perform hourly snapshot.";
@@ -315,14 +316,14 @@ checkHourlyInterval() {
 # make sure we don't perform a daily rotate prematurely
 #------------------------------------------------------------------------------
 checkDailyInterval() {
-  logInfo "checkWeeklyInterval(): Beginning checkDailyInterval...";
+  logInfo "checkDailyInterval(): Beginning checkDailyInterval...";
   if [ $DAILY_LAST -a -f $DAILY_LAST -a -s $DAILY_LAST ] ; then
     exec 3<&0;
     exec 0<"$DAILY_LAST";
     while read -r LAST;
     do 
       if (( `$DATE -u +%s` < $[$LAST+$DAILY_INTERVAL_SEC] )) ; then
-        logInfo "checkDailyInterval(): Will not perform daily rotate; last daily rotate occurred within $($DAILY_INTERVAL_SEC/$DAY_SEC) day(s)";
+        logInfo "checkDailyInterval(): Will not perform daily rotate; last daily rotate occurred within $DAY_INTERVAL day(s)";
         PERFORM_DAILY_ROTATE=no;
       else
         logInfo "checkDailyInterval(): Will perform daily rotate.";
@@ -333,7 +334,7 @@ checkDailyInterval() {
   else
     logInfo "checkDailyInterval(): File $DAILY_LAST not found; will attempt daily rotate.";
   fi;
-  logInfo "checkWeeklyInterval(): Done.";
+  logInfo "checkDailyInterval(): Done.";
 }
 
 #------------------------------------------------------------------------------
@@ -347,7 +348,7 @@ checkWeeklyInterval() {
     while read -r LAST;
     do 
       if (( `$DATE -u +%s` < $[$LAST+$WEEKLY_INTERVAL_SEC] )) ; then
-        logInfo "checkWeeklyInterval(): Will not perform weekly rotate; last weekly rotate occurred within $($WEEKLY_INTERVAL_SEC/$WEEK_SEC) week(s).";
+        logInfo "checkWeeklyInterval(): Will not perform weekly rotate; last weekly rotate occurred within $WEEK_INTERVAL week(s).";
         PERFORM_WEEKLY_ROTATE=no;
       else
         logInfo "checkWeeklyInterval(): Will perform weekly rotate.";
@@ -617,6 +618,8 @@ makeHourlySnapshot() {
 
   # TODO implement cleanup for cases where rsync failed; 
   # previous renames need to be undone
+  $TOUCH $HOURLY_LAST;
+  $ECHO "`$DATE -u +%s`" > $HOURLY_LAST;
 
   # and thats it for home.
   logInfo "makeHourlySnapshot(): Done.";
@@ -766,6 +769,7 @@ startup() {
 
   checkWeeklyInterval;
   checkDailyInterval;
+  checkHourlyInterval;
 
   mountSparseImageRW;
 
