@@ -39,6 +39,9 @@ DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime";
 MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS"; # append FS options here
 SPARSE_IMAGE_MOUNT=; # attatch image to this mountpoint 
 SPARSE_IMAGE_DIR=; # directory storing image file
+HOUR_INTERVAL=1; # make snapshots every hour
+DAY_INTERVAL=1; # rotate dailies once a day, every day
+WEEK_INTERVAL=1; # rotate weeklies once a week, every week
 
 # ----------------------------------------------------------------------
 # ------------- COMMANDS --------------------
@@ -111,13 +114,13 @@ HOUR_SEC=`expr "60" "*" "60"`; # seconds per hourl
 DAY_SEC=`expr "$HOUR_SEC" "*" "24"`; # seconds per day
 WEEK_SEC=`expr "$DAY_SEC" "*" "7"`;
 
-# Time intervals (in seconds)
-# default is one hour, minus 10% for chron miss
-HOURLY_INTERVAL_SEC=`expr "$HOUR_SEC" "*" "1" "-" "$HOUR_SEC" "/" "10"`; 
-# default is one day
-DAILY_INTERVAL_SEC=`expr "$DAY_SEC" "*" "1" "-" "$DAY_SEC" "/" "10"`; 
-# default is one week
-WEEKLY_INTERVAL_SEC=`expr "$WEEK_SEC" "*" "1" "-" "$WEEK_SEC" "/" "10"`;
+# Computed Time intervals (in seconds)
+# default is one hour, minus 10% for cron miss
+HOURLY_INTERVAL_SEC=`expr "$HOUR_SEC" "*" "$HOUR_INTERVAL" "-" "$HOUR_SEC" "/" "10"`; 
+# default is one day, minus 10% for cron miss
+DAILY_INTERVAL_SEC=`expr "$DAY_SEC" "*" "$DAY_INTERVAL" "-" "$DAY_SEC" "/" "10"`; 
+# default is one week, minus 10% for cron miss
+WEEKLY_INTERVAL_SEC=`expr "$WEEK_SEC" "*" "$WEEK_INTERVAL" "-" "$WEEK_SEC" "/" "10"`;
 
 # LOGGING levels
 LOG_TRACE=5;
