@@ -82,10 +82,11 @@ INCLUDES=$CONFIG_DIR/include;
 EXCLUDE_DIR=$CONFIG_DIR;
 
 # These persistent files are created on first-run
-DAILY_LAST=$CONFIG_DIR/daily.last;
-WEEKLY_LAST=$CONFIG_DIR/weekly.last;
-SPARSE_IMAGE_STOR=$CONFIG_DIR/sparse.dev;
-LOOP_DEV_STOR=$CONFIG_DIR/loop.dev;
+HOURLY_LAST=$CONFIG_DIR/.hourly.last
+DAILY_LAST=$CONFIG_DIR/.daily.last;
+WEEKLY_LAST=$CONFIG_DIR/.weekly.last;
+SPARSE_IMAGE_STOR=$CONFIG_DIR/.sparse.dev;
+LOOP_DEV_STOR=$CONFIG_DIR/.loop.dev;
 
 # Various lock and run files (may be tmpfs so aren't persistent)
 LOCK_DIR=/var/lock/snapshot;
@@ -96,6 +97,7 @@ FATAL_LOCK_FILE=$LOCK_DIR/fatal.lock;
 LOG_FILE=/var/log/snapshot.log;
 
 # Rotation variables
+PERFORM_HOURLY_SNAPSHOT=yes;
 PERFORM_DAILY_ROTATE=yes;
 PERFORM_WEEKLY_ROTATE=yes;
 
@@ -104,9 +106,18 @@ HOURLY_SNAP_LIMIT=23;
 DAILY_SNAP_LIMIT=29;
 WEEKLY_SNAP_LIMIT=51;
 
+# Time definitions
+HOUR_SEC=`expr "60" "*" "60"`; # seconds per hourl
+DAY_SEC=`expr "$HOUR_SEC" "*" "24"`; # seconds per day
+WEEK_SEC=`expr "$DAY_SEC" "*" "7"`;
+
 # Time intervals (in seconds)
-DAILY_INTERVAL_SEC=60*60*24;
-WEEKLY_INTERVAL_SEC=$DAILY_INTERVAL_SEC*7;
+# default is one hour, minus 10% for chron miss
+HOURLY_INTERVAL_SEC=`expr "$HOUR_SEC" "*" "1" "-" "$HOUR_SEC" "/" "10"`; 
+# default is one day
+DAILY_INTERVAL_SEC=`expr "$DAY_SEC" "*" "1" "-" "$DAY_SEC" "/" "10"`; 
+# default is one week
+WEEKLY_INTERVAL_SEC=`expr "$WEEK_SEC" "*" "1" "-" "$WEEK_SEC" "/" "10"`;
 
 # LOGGING levels
 LOG_TRACE=5;
@@ -132,6 +143,11 @@ echoConsole() {
     if [ $SILENT = no ]; then
         echo $1;
     fi;
+}
+
+logLog() {
+  echoConsole "LOG: $*";
+  echo "`$DATE` [$$] LOG: $*" >> $LOG_FILE;
 }
 
 logTrace() {
@@ -268,6 +284,31 @@ getLock() {
 }
 
 #------------------------------------------------------------------------------
+# make sure we don't perform an hourly snapshot prematurely
+#------------------------------------------------------------------------------
+checkHourlyInterval() {
+  logInfo "checkHourlyInterval(): Beginning checkHourlyInterval";
+  if [ $HOURLY_LAST -a -f $HOURLY_LAST -a -s $HOURLY_LAST ] ; then
+    exec 3<&0;
+    exec 0<"$HOURLY_LAST";
+    while read -r LAST;
+    do 
+      if (( `$DATE -u +%s` < $[$LAST+$HOURLY_INTERVAL_SEC] )) ; then
+        logInfo "checkHourlyInterval(): Will not perform hourly rotate; last hourly rotate occurred within $($HOURLY_INTERVAL_SEC/$HOUR_SEC) hours.";
+        PERFORM_HOURLY_SNAPSHOT=no;
+      else
+        logInfo "checkHourlyInterval(): Will perform hourly snapshot.";
+      fi;
+      break;
+    done;
+    exec 0<&3;
+  else
+    logInfo "checkHourlyInterval(): File $HOURLY_LAST not found; will attempt hourly snapshot.";
+  fi;
+  logInfo "checkHourlyInterval(): Done.";
+}
+
+#------------------------------------------------------------------------------
 # make sure we don't perform a daily rotate prematurely
 #------------------------------------------------------------------------------
 checkDailyInterval() {
@@ -278,7 +319,7 @@ checkDailyInterval() {
     while read -r LAST;
     do 
       if (( `$DATE -u +%s` < $[$LAST+$DAILY_INTERVAL_SEC] )) ; then
-        logInfo "checkDailyInterval(): Will not perform daily rotate; last daily rotate occurred within 24 hours.";
+        logInfo "checkDailyInterval(): Will not perform daily rotate; last daily rotate occurred within $($DAILY_INTERVAL_SEC/$DAY_SEC) day(s)";
         PERFORM_DAILY_ROTATE=no;
       else
         logInfo "checkDailyInterval(): Will perform daily rotate.";
@@ -303,7 +344,7 @@ checkWeeklyInterval() {
     while read -r LAST;
     do 
       if (( `$DATE -u +%s` < $[$LAST+$WEEKLY_INTERVAL_SEC] )) ; then
-        logInfo "checkWeeklyInterval(): Will not perform weekly rotate; last weekly rotate occurred within 7 days.";
+        logInfo "checkWeeklyInterval(): Will not perform weekly rotate; last weekly rotate occurred within $($WEEKLY_INTERVAL_SEC/$WEEK_SEC) week(s).";
         PERFORM_WEEKLY_ROTATE=no;
       else
         logInfo "checkWeeklyInterval(): Will perform weekly rotate.";
@@ -766,7 +807,7 @@ shutdown() {
 # Main
 #------------------------------------------------------------------------------
 main() {
-  logInfo "main(): Script starting...";
+  logLog "main(): Script starting...";
 
   startup;
 
@@ -789,8 +830,12 @@ main() {
       logInfo "main(): Skipping daily snapshot rotatation...";
     fi
 
-    logInfo "main(): Performing hourly snapshot creation...";
-    makeHourlySnapshot;
+    if [ $PERFORM_HOURLY_SNAPSHOT = yes ] ; then
+      logInfo "main(): Performing hourly snapshot creation...";
+      makeHourlySnapshot;
+    else
+      logInfo "main(): Skipping hourly snapshot creation...";
+    fi
 
     logInfo "main(): Completed snapshot of /$SOURCE.";
   done;
@@ -798,7 +843,7 @@ main() {
 
   shutdown;
 
-  logInfo "main(): Script exiting successfully.";
+  logLog "main(): Script exiting successfully.";
 }
 
 #------------------------------------------------------------------------------
