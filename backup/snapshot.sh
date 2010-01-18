@@ -28,21 +28,6 @@
 
 unset PATH
 
-#-----------------------------------------------------------------------
-#------------- User Parameters -----------------------------------------
-#-----------------------------------------------------------------------
-# LOG_LEVEL=$LOG_INFO; # change below in LOGGING section
-SILENT=no; # no - print to console; yes - suppress console output
-IMAGE_SIZE=; # specify in M (megabytes) or G (gigabytes)
-IMAGE_FS_TYPE=; # use either ext4, ext3 or ext2 (must support hard-links)
-DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime"; 
-MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS"; # append FS options here
-SPARSE_IMAGE_MOUNT=; # attatch image to this mountpoint 
-SPARSE_IMAGE_DIR=; # directory storing image file
-HOUR_INTERVAL=1; # make snapshots every hour
-DAY_INTERVAL=1; # rotate dailies once a day, every day
-WEEK_INTERVAL=1; # rotate weeklies once a week, every week
-
 # ----------------------------------------------------------------------
 # ------------- COMMANDS --------------------
 # Include external commands here for portability
@@ -59,13 +44,13 @@ HASH=/usr/bin/md5sum;
 HOSTNAME=/bin/hostname;
 ID=/usr/bin/id;
 KILL=/bin/kill;
-KPARTX=/sbin/kpartx;
+#KPARTX=/sbin/kpartx;
 LOSETUP=/sbin/losetup;
 MKDIR=/bin/mkdir;
 MKFS=/sbin/mkfs;
 MOUNT=/bin/mount;
 MV=/bin/mv;
-PARTED=/sbin/parted;
+#PARTED=/sbin/parted;
 RM=/bin/rm;
 RSYNC=/usr/bin/rsync;
 SED=/bin/sed;
@@ -131,13 +116,20 @@ LOG_WARNING=2;
 LOG_ERROR=1;
 LOG_FATAL=0;
 
-LOG_LEVEL=$LOG_INFO; # see above $LOG_xxx
+# Default mounting options
+DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime"; 
 
 # Unset parameters (set within startup())
 SOURCES=;
 SOURCE=;
 LOOP=;
 SPARSE_IMAGE_FILE=;
+
+# Read in the user defined parameters
+. /usr/local/etc/snapshot/setenv.sh
+
+# Merge user and default settings
+MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS,$USER_MOUNT_OPTIONS";
 
 #-----------------------------------------------------------------------
 #------------- FUNCTIONS -----------------------------------------------
@@ -393,32 +385,42 @@ createSparseImage() {
   fi;
   logDebug "createSparseImage(): File creation complete.";
 
-  logDebug "createSparseImage(): Creating partition...";
-  logTrace "createSparseImage(): $PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mklabel msdos  >> $LOG_FILE 2>&1";
-  `$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mklabel msdos  >> $LOG_FILE 2>&1`;
-  if [ $? -ne 0 ] ; then
-      logFatal "createSparseImage(): Unable to create partition table; exiting.";
-  fi;
-  logTrace "createSparseImage(): $PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mkpart primary 0G $IMAGE_SIZE  >> $LOG_FILE 2>&1";
-  `$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mkpart primary 0G $IMAGE_SIZE  >> $LOG_FILE 2>&1`;
-  if [ $? -ne 0 ] ; then
-      logFatal "createSparseImage(): Unable to create partition; exiting.";
-  fi;
-  logDebug "createSparseImage(): Partition creation complete.";
+  #logDebug "createSparseImage(): Creating partition...";
+  #logTrace "createSparseImage(): $PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mklabel msdos  >> $LOG_FILE 2>&1";
+  #`$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mklabel msdos  >> $LOG_FILE 2>&1`;
+  #if [ $? -ne 0 ] ; then
+  #    logFatal "createSparseImage(): Unable to create partition table; exiting.";
+  #fi;
+  #logTrace "createSparseImage(): $PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mkpart primary 0G $IMAGE_SIZE  >> $LOG_FILE 2>&1";
+  #`$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mkpart primary 0G $IMAGE_SIZE  >> $LOG_FILE 2>&1`;
+  #if [ $? -ne 0 ] ; then
+  #    logFatal "createSparseImage(): Unable to create partition; exiting.";
+  #fi;
+  #logDebug "createSparseImage(): Partition creation complete.";
 
-  CWD=`$LPWD`;
-  cd $SPARSE_IMAGE_DIR;
-    logDebug "createSparseImage(): Creating temp loopback device for initialization...";
-    logTrace "createSparseImage(): $KPARTX -a -v $SPARSE_IMAGE_FILE";
-    LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE`;
-    if [ $? -ne 0 ] ; then
-        logFatal "createSparseImage(): Unable to create device mapping using $KPARTX; exiting.";
-    fi;
-    logDebug "createSparseImage(): Loopback device creation complete.";
-    LOOP=`$ECHO $LOOP | $CUT -d' ' -f3`;
-    LOOP=/dev/mapper/$LOOP;
-    $ECHO "$LOOP" > $LOOP_DEV_STOR;
-  cd $CWD;
+  #CWD=`$LPWD`;
+  #cd $SPARSE_IMAGE_DIR;
+  #  logDebug "createSparseImage(): Creating temp loopback device for initialization...";
+  #  logTrace "createSparseImage(): $KPARTX -a -v $SPARSE_IMAGE_FILE";
+  #  LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE`;
+  #  if [ $? -ne 0 ] ; then
+  #      logFatal "createSparseImage(): Unable to create device mapping using $KPARTX; #exiting.";
+  #  fi;
+  #  logDebug "createSparseImage(): Loopback device creation complete.";
+  #  LOOP=`$ECHO $LOOP | $CUT -d' ' -f3`;
+  #  LOOP=/dev/mapper/$LOOP;
+  #  $ECHO "$LOOP" > $LOOP_DEV_STOR;
+  #cd $CWD;
+  logDebug "createSparseImage(): Attaching $SPARSE_IMAGE_FILE to loop...";
+  logTrace "createSparseImage(): $LOSETUP --find $SPARSE_IMAGE_FILE";
+  $LOSETUP --find $SPARSE_IMAGE_FILE;
+
+  logTrace "createSparseImage(): $LOSETUP -j $SPARSE_IMAGE_FILE | $CUT -d':' -f1";
+  LOOP=`$LOSETUP -j $SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
+
+  logDebug "createSparseImage(): Attached $SPARSE_IMAGE_FILE to $LOOP";
+  $ECHO "$LOOP" > $LOOP_DEV_STOR;
+
 
   logDebug "createSparseImage(): Creating $IMAGE_FS_TYPE fs on $LOOP...";
   logTrace "createSparseImage(): $MKFS -t $IMAGE_FS_TYPE $LOOP";
@@ -462,23 +464,37 @@ setupLoopDevice() {
       logFatal "setupLoopDevice(): Could not read loop device from file $LOOP_DEV_STOR; exiting.";
     fi;
   fi;
+  
+  LOOP_EXISTS=`$LOSETUP -j $SPARSE_IMAGE_FILE | grep "$LOOP" | wc -c`;
 
-  if [ ! -e $LOOP ] ; then
-    CWD=`$LPWD`;
-    cd $SPARSE_IMAGE_DIR; 
-      logDebug "setupLoopDevice(): (re)creating loop device $LOOP...";
-      logTrace "setupLoopDevice(): $KPARTX -a -v $SPARSE_IMAGE_FILE";
-      LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE`;
-      if [ $? -ne 0 ] ; then
-        logFatal "setupLoopDevice(): $KPARTX call failed; check $LOSETUP for available loop devices; consider rebooting to reset loop devs.";
-      fi;
-      logDebug "setupLoopDevice(): (re)creation complete.";
-      LOOP=`$ECHO $LOOP | $CUT -d' ' -f3`;
-      LOOP=/dev/mapper/$LOOP;
-      $ECHO "$LOOP" > $LOOP_DEV_STOR;
-    cd $CWD;
+  if [ $LOOP_EXISTS = 0 ] ; then
+    #CWD=`$LPWD`;
+    #cd $SPARSE_IMAGE_DIR; 
+    #  logDebug "setupLoopDevice(): (re)creating loop device $LOOP...";
+    #  logTrace "setupLoopDevice(): $KPARTX -a -v $SPARSE_IMAGE_FILE";
+    #  LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE`;
+    #  if [ $? -ne 0 ] ; then
+    #    logFatal "setupLoopDevice(): $KPARTX call failed; check $LOSETUP for available #loop devices; consider rebooting to reset loop devs.";
+    #  fi;
+    #  logDebug "setupLoopDevice(): (re)creation complete.";
+    #  LOOP=`$ECHO $LOOP | $CUT -d' ' -f3`;
+    #  LOOP=/dev/mapper/$LOOP;
+    #  $ECHO "$LOOP" > $LOOP_DEV_STOR;
+    #cd $CWD;
+    logDebug "setupLoopDevice(): Attaching $SPARSE_IMAGE_FILE to loop...";
+    logTrace "setupLoopDevice(): $LOSETUP --find $SPARSE_IMAGE_FILE";
+    $LOSETUP --find $SPARSE_IMAGE_FILE;
+    if[ $? -ne 0 ] then;
+      logFatal "setupLoopDevice(): $LOSETUP --find $SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
+    fi;
+
+    logTrace "setupLoopDevice(): $LOSETUP -j $SPARSE_IMAGE_FILE | $CUT -d':' -f1";
+    LOOP=`$LOSETUP -j $SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
+
+    logDebug "setupLoopDevice(): Attached $SPARSE_IMAGE_FILE to $LOOP";
+    $ECHO "$LOOP" > $LOOP_DEV_STOR;
   else
-    logDebug "setupLoopDevice(): $LOOP appears to exist, skipping $KPARTX call.";
+    logDebug "setupLoopDevice(): $LOOP appears to exist, skipping.";
   fi;
 
   logInfo "setupLoopDevice(): $LOOP is ready.";
