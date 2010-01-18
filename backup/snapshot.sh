@@ -116,12 +116,12 @@ DAY_SEC=`$EXPR "$HOUR_SEC" "*" "24"`; # seconds per day
 WEEK_SEC=`$EXPR "$DAY_SEC" "*" "7"`;
 
 # Computed Time intervals (in seconds)
-# default is one hour, minus 10% for cron miss
-HOURLY_INTERVAL_SEC=`$EXPR "$HOUR_SEC" "*" "$HOUR_INTERVAL" "-" "$HOUR_SEC" "/" "10"`; 
-# default is one day, minus 10% for cron miss
-DAILY_INTERVAL_SEC=`$EXPR "$DAY_SEC" "*" "$DAY_INTERVAL" "-" "$DAY_SEC" "/" "10"`; 
-# default is one week, minus 10% for cron miss
-WEEKLY_INTERVAL_SEC=`$EXPR "$WEEK_SEC" "*" "$WEEK_INTERVAL" "-" "$WEEK_SEC" "/" "10"`;
+# default is one hour, minus 1% for cron miss
+HOURLY_INTERVAL_SEC=`$EXPR "$HOUR_SEC" "*" "$HOUR_INTERVAL" "-" "$HOUR_SEC" "/" "100"`; 
+# default is one day, minus 1% for cron miss
+DAILY_INTERVAL_SEC=`$EXPR "$DAY_SEC" "*" "$DAY_INTERVAL" "-" "$DAY_SEC" "/" "100"`; 
+# default is one week, minus 1% for cron miss
+WEEKLY_INTERVAL_SEC=`$EXPR "$WEEK_SEC" "*" "$WEEK_INTERVAL" "-" "$WEEK_SEC" "/" "100"`;
 
 # LOGGING levels
 LOG_TRACE=5;
