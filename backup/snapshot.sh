@@ -40,12 +40,14 @@ DATE=/bin/date;
 ECHO=/bin/echo;
 EXPR=/usr/bin/expr;
 FSCK=/sbin/fsck;
+GREP=/bin/grep;
 HASH=/usr/bin/md5sum;
 HOSTNAME=/bin/hostname;
 ID=/usr/bin/id;
 KILL=/bin/kill;
 #KPARTX=/sbin/kpartx;
 LOSETUP=/sbin/losetup;
+LPWD=/bin/pwd;
 MKDIR=/bin/mkdir;
 MKFS=/sbin/mkfs;
 MOUNT=/bin/mount;
@@ -55,8 +57,8 @@ RM=/bin/rm;
 RSYNC=/usr/bin/rsync;
 SED=/bin/sed;
 SYNC=/bin/sync;
-LPWD=/bin/pwd;
 TOUCH=/bin/touch;
+WC=/usr/bin/wc;
 
 # The semantics of kill can differ; either -n (Ubuntu) or -s (RHEL/Centos)
 # Make appropriate change here.
@@ -100,14 +102,6 @@ HOUR_SEC=`$EXPR "60" "*" "60"`; # seconds per hourl
 DAY_SEC=`$EXPR "$HOUR_SEC" "*" "24"`; # seconds per day
 WEEK_SEC=`$EXPR "$DAY_SEC" "*" "7"`;
 
-# Computed Time intervals (in seconds)
-# default is one hour, minus 1% for cron miss
-HOURLY_INTERVAL_SEC=`$EXPR "$HOUR_SEC" "*" "$HOUR_INTERVAL" "-" "$HOUR_SEC" "/" "100"`; 
-# default is one day, minus 1% for cron miss
-DAILY_INTERVAL_SEC=`$EXPR "$DAY_SEC" "*" "$DAY_INTERVAL" "-" "$DAY_SEC" "/" "100"`; 
-# default is one week, minus 1% for cron miss
-WEEKLY_INTERVAL_SEC=`$EXPR "$WEEK_SEC" "*" "$WEEK_INTERVAL" "-" "$WEEK_SEC" "/" "100"`;
-
 # LOGGING levels
 LOG_TRACE=5;
 LOG_DEBUG=4;
@@ -126,10 +120,17 @@ LOOP=;
 SPARSE_IMAGE_FILE=;
 
 # Read in the user defined parameters
-. /usr/local/etc/snapshot/setenv.sh
+. $CONFIG_DIR/setenv.sh;
 
 # Merge user and default settings
 MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS,$USER_MOUNT_OPTIONS";
+# Computed Time intervals (in seconds)
+# default is one hour, minus 1% for cron miss
+HOURLY_INTERVAL_SEC=`$EXPR "$HOUR_SEC" "*" "$HOUR_INTERVAL" "-" "$HOUR_SEC" "/" "100"`; 
+# default is one day, minus 1% for cron miss
+DAILY_INTERVAL_SEC=`$EXPR "$DAY_SEC" "*" "$DAY_INTERVAL" "-" "$DAY_SEC" "/" "100"`; 
+# default is one week, minus 1% for cron miss
+WEEKLY_INTERVAL_SEC=`$EXPR "$WEEK_SEC" "*" "$WEEK_INTERVAL" "-" "$WEEK_SEC" "/" "100"`;
 
 #-----------------------------------------------------------------------
 #------------- FUNCTIONS -----------------------------------------------
@@ -385,40 +386,17 @@ createSparseImage() {
   fi;
   logDebug "createSparseImage(): File creation complete.";
 
-  #logDebug "createSparseImage(): Creating partition...";
-  #logTrace "createSparseImage(): $PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mklabel msdos  >> $LOG_FILE 2>&1";
-  #`$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mklabel msdos  >> $LOG_FILE 2>&1`;
-  #if [ $? -ne 0 ] ; then
-  #    logFatal "createSparseImage(): Unable to create partition table; exiting.";
-  #fi;
-  #logTrace "createSparseImage(): $PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mkpart primary 0G $IMAGE_SIZE  >> $LOG_FILE 2>&1";
-  #`$PARTED $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE mkpart primary 0G $IMAGE_SIZE  >> $LOG_FILE 2>&1`;
-  #if [ $? -ne 0 ] ; then
-  #    logFatal "createSparseImage(): Unable to create partition; exiting.";
-  #fi;
-  #logDebug "createSparseImage(): Partition creation complete.";
+  logDebug "createSparseImage(): Attaching $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to loop...";
+  logTrace "createSparseImage(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
+  `$LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
+  if [ $? -ne 0 ] ; then
+    logFatal "createSparseImage(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
+  fi;
 
-  #CWD=`$LPWD`;
-  #cd $SPARSE_IMAGE_DIR;
-  #  logDebug "createSparseImage(): Creating temp loopback device for initialization...";
-  #  logTrace "createSparseImage(): $KPARTX -a -v $SPARSE_IMAGE_FILE";
-  #  LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE`;
-  #  if [ $? -ne 0 ] ; then
-  #      logFatal "createSparseImage(): Unable to create device mapping using $KPARTX; #exiting.";
-  #  fi;
-  #  logDebug "createSparseImage(): Loopback device creation complete.";
-  #  LOOP=`$ECHO $LOOP | $CUT -d' ' -f3`;
-  #  LOOP=/dev/mapper/$LOOP;
-  #  $ECHO "$LOOP" > $LOOP_DEV_STOR;
-  #cd $CWD;
-  logDebug "createSparseImage(): Attaching $SPARSE_IMAGE_FILE to loop...";
-  logTrace "createSparseImage(): $LOSETUP --find $SPARSE_IMAGE_FILE";
-  $LOSETUP --find $SPARSE_IMAGE_FILE;
+  logTrace "createSparseImage(): $LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1";
+  LOOP=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
 
-  logTrace "createSparseImage(): $LOSETUP -j $SPARSE_IMAGE_FILE | $CUT -d':' -f1";
-  LOOP=`$LOSETUP -j $SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
-
-  logDebug "createSparseImage(): Attached $SPARSE_IMAGE_FILE to $LOOP";
+  logDebug "createSparseImage(): Attached $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to $LOOP";
   $ECHO "$LOOP" > $LOOP_DEV_STOR;
 
 
@@ -465,33 +443,21 @@ setupLoopDevice() {
     fi;
   fi;
   
-  LOOP_EXISTS=`$LOSETUP -j $SPARSE_IMAGE_FILE | grep "$LOOP" | wc -c`;
+  logTrace "setupLoopDevice(): LOOP_EXISTS=$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $GREP $LOOP | $WC -c";
+  LOOP_EXISTS=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $GREP "$LOOP" | $WC -c`;
 
   if [ $LOOP_EXISTS = 0 ] ; then
-    #CWD=`$LPWD`;
-    #cd $SPARSE_IMAGE_DIR; 
-    #  logDebug "setupLoopDevice(): (re)creating loop device $LOOP...";
-    #  logTrace "setupLoopDevice(): $KPARTX -a -v $SPARSE_IMAGE_FILE";
-    #  LOOP=`$KPARTX -a -v $SPARSE_IMAGE_FILE`;
-    #  if [ $? -ne 0 ] ; then
-    #    logFatal "setupLoopDevice(): $KPARTX call failed; check $LOSETUP for available #loop devices; consider rebooting to reset loop devs.";
-    #  fi;
-    #  logDebug "setupLoopDevice(): (re)creation complete.";
-    #  LOOP=`$ECHO $LOOP | $CUT -d' ' -f3`;
-    #  LOOP=/dev/mapper/$LOOP;
-    #  $ECHO "$LOOP" > $LOOP_DEV_STOR;
-    #cd $CWD;
-    logDebug "setupLoopDevice(): Attaching $SPARSE_IMAGE_FILE to loop...";
-    logTrace "setupLoopDevice(): $LOSETUP --find $SPARSE_IMAGE_FILE";
-    $LOSETUP --find $SPARSE_IMAGE_FILE;
-    if[ $? -ne 0 ] then;
-      logFatal "setupLoopDevice(): $LOSETUP --find $SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
+    logDebug "setupLoopDevice(): Attaching $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to loop...";
+    logTrace "setupLoopDevice(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
+    `$LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE`;
+    if [ $? -ne 0 ] ; then
+      logFatal "setupLoopDevice(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
     fi;
 
-    logTrace "setupLoopDevice(): $LOSETUP -j $SPARSE_IMAGE_FILE | $CUT -d':' -f1";
-    LOOP=`$LOSETUP -j $SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
+    logTrace "setupLoopDevice(): $LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1";
+    LOOP=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
 
-    logDebug "setupLoopDevice(): Attached $SPARSE_IMAGE_FILE to $LOOP";
+    logDebug "setupLoopDevice(): Attached $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to $LOOP";
     $ECHO "$LOOP" > $LOOP_DEV_STOR;
   else
     logDebug "setupLoopDevice(): $LOOP appears to exist, skipping.";
