@@ -96,6 +96,7 @@ DAILY_SNAP_LIMIT=29;
 WEEKLY_SNAP_LIMIT=51;
 
 # Time definitions
+NOW_SEC=`$DATE -u +%s`; # the current time
 HOUR_SEC=`$EXPR "60" "*" "60"`; # seconds per hourl
 DAY_SEC=`$EXPR "$HOUR_SEC" "*" "24"`; # seconds per day
 WEEK_SEC=`$EXPR "$DAY_SEC" "*" "7"`;
@@ -123,12 +124,12 @@ SPARSE_IMAGE_FILE=;
 # Merge user and default settings
 MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS,$USER_MOUNT_OPTIONS";
 # Computed Time intervals (in seconds)
-# default is one hour, + 1% for cron miss
-HOURLY_INTERVAL_SEC=`$EXPR "$HOUR_SEC" "*" "$HOUR_INTERVAL" "+" "$HOUR_SEC" "/" "100"`; 
-# default is one day, + 1% for cron miss
-DAILY_INTERVAL_SEC=`$EXPR "$DAY_SEC" "*" "$DAY_INTERVAL" "+" "$DAY_SEC" "/" "100"`; 
-# default is one week, + 1% for cron miss
-WEEKLY_INTERVAL_SEC=`$EXPR "$WEEK_SEC" "*" "$WEEK_INTERVAL" "+" "$WEEK_SEC" "/" "100"`;
+# default is one hour, - 10% for cron miss
+HOURLY_INTERVAL_SEC=`$EXPR "$HOUR_SEC" "*" "$HOUR_INTERVAL" "-" "$HOUR_SEC" "/" "10"`; 
+# default is one day, - 1% for cron miss
+DAILY_INTERVAL_SEC=`$EXPR "$DAY_SEC" "*" "$DAY_INTERVAL" "-" "$DAY_SEC" "/" "100"`; 
+# default is one week, - 1% for cron miss
+WEEKLY_INTERVAL_SEC=`$EXPR "$WEEK_SEC" "*" "$WEEK_INTERVAL" "-" "$WEEK_SEC" "/" "100"`;
 
 #-----------------------------------------------------------------------
 #------------- FUNCTIONS -----------------------------------------------
@@ -288,7 +289,7 @@ checkHourlyInterval() {
     exec 0<"$HOURLY_LAST";
     while read -r LAST;
     do 
-      if (( `$DATE -u +%s` < $[$LAST+$HOURLY_INTERVAL_SEC] )) ; then
+      if (( $NOW_SEC < $[$LAST+$HOURLY_INTERVAL_SEC] )) ; then
         logInfo "checkHourlyInterval(): Will not perform hourly rotate; last hourly rotate occurred within $HOUR_INTERVAL hours.";
         PERFORM_HOURLY_SNAPSHOT=no;
       else
@@ -313,7 +314,7 @@ checkDailyInterval() {
     exec 0<"$DAILY_LAST";
     while read -r LAST;
     do 
-      if (( `$DATE -u +%s` < $[$LAST+$DAILY_INTERVAL_SEC] )) ; then
+      if (( $NOW_SEC < $[$LAST+$DAILY_INTERVAL_SEC] )) ; then
         logInfo "checkDailyInterval(): Will not perform daily rotate; last daily rotate occurred within $DAY_INTERVAL day(s)";
         PERFORM_DAILY_ROTATE=no;
       else
@@ -338,7 +339,7 @@ checkWeeklyInterval() {
     exec 0<"$WEEKLY_LAST";
     while read -r LAST;
     do 
-      if (( `$DATE -u +%s` < $[$LAST+$WEEKLY_INTERVAL_SEC] )) ; then
+      if (( $NOW_SEC < $[$LAST+$WEEKLY_INTERVAL_SEC] )) ; then
         logInfo "checkWeeklyInterval(): Will not perform weekly rotate; last weekly rotate occurred within $WEEK_INTERVAL week(s).";
         PERFORM_WEEKLY_ROTATE=no;
       else
