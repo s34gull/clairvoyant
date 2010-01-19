@@ -123,12 +123,12 @@ SPARSE_IMAGE_FILE=;
 # Merge user and default settings
 MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS,$USER_MOUNT_OPTIONS";
 # Computed Time intervals (in seconds)
-# default is one hour, minus 1% for cron miss
-HOURLY_INTERVAL_SEC=`$EXPR "$HOUR_SEC" "*" "$HOUR_INTERVAL" "-" "$HOUR_SEC" "/" "100"`; 
-# default is one day, minus 1% for cron miss
-DAILY_INTERVAL_SEC=`$EXPR "$DAY_SEC" "*" "$DAY_INTERVAL" "-" "$DAY_SEC" "/" "100"`; 
-# default is one week, minus 1% for cron miss
-WEEKLY_INTERVAL_SEC=`$EXPR "$WEEK_SEC" "*" "$WEEK_INTERVAL" "-" "$WEEK_SEC" "/" "100"`;
+# default is one hour, + 1% for cron miss
+HOURLY_INTERVAL_SEC=`$EXPR "$HOUR_SEC" "*" "$HOUR_INTERVAL" "+" "$HOUR_SEC" "/" "100"`; 
+# default is one day, + 1% for cron miss
+DAILY_INTERVAL_SEC=`$EXPR "$DAY_SEC" "*" "$DAY_INTERVAL" "+" "$DAY_SEC" "/" "100"`; 
+# default is one week, + 1% for cron miss
+WEEKLY_INTERVAL_SEC=`$EXPR "$WEEK_SEC" "*" "$WEEK_INTERVAL" "+" "$WEEK_SEC" "/" "100"`;
 
 #-----------------------------------------------------------------------
 #------------- FUNCTIONS -----------------------------------------------
