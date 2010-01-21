@@ -58,6 +58,9 @@ SYNC=/bin/sync;
 TOUCH=/bin/touch;
 WC=/usr/bin/wc;
 
+# If we need encryption
+CRYPTSETUP=/sbin/cryptsetup
+
 # The semantics of kill can differ; either -n (Ubuntu) or -s (RHEL/Centos)
 # Make appropriate change here.
 TEST_PROCESS="$KILL -n 0";
@@ -76,6 +79,7 @@ DAILY_LAST=$CONFIG_DIR/.daily.last;
 WEEKLY_LAST=$CONFIG_DIR/.weekly.last;
 SPARSE_IMAGE_STOR=$CONFIG_DIR/.sparse.dev;
 LOOP_DEV_STOR=$CONFIG_DIR/.loop.dev;
+CRYPT_DEV_STOR=$CONFIG_DIR/.crypt.dev;
 
 # Various lock and run files (may be tmpfs so aren't persistent)
 LOCK_DIR=/var/lock/snapshot;
@@ -116,7 +120,9 @@ DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime";
 SOURCES=;
 SOURCE=;
 LOOP=;
+CRYPT=;
 SPARSE_IMAGE_FILE=;
+MOUNT_DEV=;
 
 # Read in the user defined parameters
 . $CONFIG_DIR/setenv.sh;
@@ -228,6 +234,14 @@ checkFields() {
     logDebug "checkFields(): SPARSE_IMAGE_DIR is set.";
   else
     logFatal "checkFields(): SPARSE_IMAGE_DIR is not set; exiting.";
+  fi;
+
+  if [ $ENCRYPT = yes ] ; then
+    if [ $PASSPHRASE ] ; then
+      logInfo "checkFields(): Encrypting snapshot data.";
+    else
+      logFatal "checkFields(): User specified encryption, but no PASSPHRASE; exiting."
+    fi;
   fi;
 }
 
@@ -372,7 +386,12 @@ createSparseImage() {
   logTrace "createSparseImage(): GUID=$ECHO $GUID | $CUT -d' ' -f1";
   GUID=`$ECHO $GUID | $CUT -d' ' -f1`;
 
-  SPARSE_IMAGE_FILE=`$HOSTNAME`.$GUID.raw;
+  SPARSE_IMAGE_FILE=`$HOSTNAME`.$GUID;
+  if [ $ENCRYPT = yes ] ; then
+    SPARSE_IMAGE_FILE=$SPARSE_IMAGE_FILE.crypt;
+  else
+    SPARSE_IMAGE_FILE=$SPARSE_IMAGE_FILE.raw;
+  fi;
   $ECHO "$SPARSE_IMAGE_FILE" > $SPARSE_IMAGE_STOR;
 
   logInfo "createSparseImage(): Initializing image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE...";
@@ -394,16 +413,32 @@ createSparseImage() {
 
   logTrace "createSparseImage(): $LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1";
   LOOP=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
-
   logDebug "createSparseImage(): Attached $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to $LOOP";
   $ECHO "$LOOP" > $LOOP_DEV_STOR;
+  MOUNT_DEV=$LOOP;
 
+  if [ $ENCRYPT = yes ] ; then
+    logDebug "createSparseImage(): Enryption requested; using $CRYPTSETUP.";
+    logTrace "createSparseImage(): $CRYPTSETUP luksFormat --batch-mode $LOOP >> $LOG_FILE 2>&1";
+    `$ECHO $PASSPHRASE | $CRYPTSETUP luksFormat --batch-mode $LOOP >> $LOG_FILE 2>&1`;
+    if [ $? -ne 0 ] ; then
+      logFatal "createSparseImage(): Unable to encrypt $LOOP using $CRYPTSETUP; exiting.";
+    fi;
+    logTrace "createSparseImage(): $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1";
+    `$ECHO $PASSPHRASE | $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
+    if [ $? -ne 0 ] ; then
+      logFatal "createSparseImage(): Unable to map $LOOP to /dev/mapper/$SPARSE_IMAGE_FILE using $CRYPTSETUP; exiting.";
+    fi;
+    CRYPT="/dev/mapper/$SPARSE_IMAGE_FILE"; # prefix is constant
+    $ECHO "$CRYPT" > $CRYPT_DEV_STOR;
+    MOUNT_DEV=$CRYPT;
+  fi;
 
-  logDebug "createSparseImage(): Creating $IMAGE_FS_TYPE fs on $LOOP...";
-  logTrace "createSparseImage(): $MKFS -t $IMAGE_FS_TYPE $LOOP";
-  $MKFS -t $IMAGE_FS_TYPE $LOOP;
+  logDebug "createSparseImage(): Creating $IMAGE_FS_TYPE fs on $MOUNT_DEV...";
+  logTrace "createSparseImage(): $MKFS -t $IMAGE_FS_TYPE $MOUNT_DEV";
+  $MKFS -t $IMAGE_FS_TYPE $MOUNT_DEV;
   if [ $? -ne 0 ] ; then
-      logFatal "createSparseImage(): Unable to create filesystem $IMAGE_FS_TYPE on $LOOP; exiting.";
+      logFatal "createSparseImage(): Unable to create filesystem $IMAGE_FS_TYPE on $MOUNT_DEV; exiting.";
   fi;
   logDebug "createSparseImage(): Filesystem creation complete.";
 
@@ -461,8 +496,40 @@ setupLoopDevice() {
   else
     logDebug "setupLoopDevice(): $LOOP appears to exist, skipping.";
   fi;
+  MOUNT_DEV=$LOOP;
+  
 
-  logInfo "setupLoopDevice(): $LOOP is ready.";
+  if [ $ENCRYPT = yes ] ; then
+    if [ ! $CRYPT ] ; then
+      if [ $CRYPT_DEV_STOR -a -f $CRYPT_DEV_STOR -a -s $CRYPT_DEV_STOR ] ; then
+        exec 3<&0;
+        exec 0<"$CRYPT_DEV_STOR";
+        while read -r CRYPT;
+        do 
+          logDebug "setupLoopDevice(): Read loop device from file ($CRYPT)";
+          break;
+        done;
+        exec 0<&3;
+      else
+        logFatal "setupLoopDevice(): Could not read loop device from file $CRYPT_DEV_STOR; exiting.";
+      fi;
+    fi;
+    if [ ! -e $CRYPT ] ; then
+      logDebug "createSparseImage(): Enryption requested; using $CRYPTSETUP to setup mapping.";
+      logTrace "createSparseImage(): $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1";
+      `$ECHO $PASSPHRASE | $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
+      if [ $? -ne 0 ] ; then
+        logFatal "createSparseImage(): Unable to map $LOOP to /dev/mapper/$SPARSE_IMAGE_FILE using $CRYPTSETUP; exiting.";
+      fi;
+      CRYPT="/dev/mapper/$SPARSE_IMAGE_FILE"; # prefix is constant
+      $ECHO "$CRYPT" > $CRYPT_DEV_STOR;
+    else
+      logDebug "setupLoopDevice(): $CRYPT appears to exist, skipping.";
+    fi;
+    MOUNT_DEV=$CRYPT;
+  fi;
+
+  logInfo "setupLoopDevice(): $MOUNT_DEV is ready.";
 }
 
 
@@ -471,20 +538,20 @@ setupLoopDevice() {
 #------------------------------------------------------------------------------
 mountSparseImageRW() {
   setupLoopDevice;
-  logInfo "mountSparseImageRW(): Re-mounting $LOOP to $SPARSE_IMAGE_MOUNT in readwrite...";
+  logInfo "mountSparseImageRW(): Re-mounting $MOUNT_DEV to $SPARSE_IMAGE_MOUNT in readwrite...";
   if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
       logFatal "mountSparseImageRW(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
   fi;
 
   logDebug "mountSparseImageRW(): Attempting remount...";
-  logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
-  `$MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
+  logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+  `$MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
       logWarn "mountSparseImageRW(): Trying without -o remount";
-      logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
-      `$MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
+      logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+      `$MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
       if [ $? -ne 0 ] ; then
-        logFatal "mountSparseImageRW(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readwrite";
+        logFatal "mountSparseImageRW(): Could not re-mount $MOUNT_DEV to $SPARSE_IMAGE_MOUNT readwrite";
       fi;
   fi;
   logDebug "mountSparseImageRW(): Mount complete.";
@@ -497,20 +564,20 @@ mountSparseImageRW() {
 #------------------------------------------------------------------------------
 mountSparseImageRO() {
   setupLoopDevice;
-  logInfo "mountSparseImageRO(): Re-mounting $LOOP to $SPARSE_IMAGE_MOUNT in readonly...";
+  logInfo "mountSparseImageRO(): Re-mounting $MOUNT_DEV to $SPARSE_IMAGE_MOUNT in readonly...";
   if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
       logFatal "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
   fi;
 
   logDebug "mountSparseImageRO(): Attempting remount...";
-  logTrace "mountSparseImageRO(): $MOUNT -t $IMAGE_FS_TYPE -o remount,ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
-  `$MOUNT -t $IMAGE_FS_TYPE -o remount,ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
+  logTrace "mountSparseImageRO(): $MOUNT -t $IMAGE_FS_TYPE -o remount,ro,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+  `$MOUNT -t $IMAGE_FS_TYPE -o remount,ro,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
       logWarn "mountSparseImageRO(): Trying without -o remount";
-      logTrace "mountSparseImageRO(): $MOUNT -t $IMAGE_FS_TYPE -o ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
-      `$MOUNT -t $IMAGE_FS_TYPE -o ro,$MOUNT_OPTIONS $LOOP $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
+      logTrace "mountSparseImageRO(): $MOUNT -t $IMAGE_FS_TYPE -o ro,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
+      `$MOUNT -t $IMAGE_FS_TYPE -o ro,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
       if [ $? -ne 0 ] ; then
-        logFatal "mountSparseImageRO(): Could not re-mount $LOOP to $SPARSE_IMAGE_MOUNT readonly";
+        logFatal "mountSparseImageRO(): Could not re-mount $MOUNT_DEV to $SPARSE_IMAGE_MOUNT readonly";
       fi;
   fi;
   logDebug "mountSparseImageRO(): Mount complete.";

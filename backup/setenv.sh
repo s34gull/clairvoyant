@@ -16,6 +16,8 @@ IMAGE_FS_TYPE=; # use either ext4, ext3 or ext2 (must support hard-links)
 USER_MOUNT_OPTIONS=; # append comma delimited FS options here
 SPARSE_IMAGE_MOUNT=; # attatch image to this mountpoint 
 SPARSE_IMAGE_DIR=; # directory storing image file
+ENCRYPT=no; # yes or no; yes will use dm-crypt aes-256; requires cryptsetup
+PASSPHRASE=; # if ENCRYPT=yes then you must provide a passphrase
 
 #-----------------------------------------------------------------------
 #------------- User Defined Intervals Parameters -----------------------
