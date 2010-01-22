@@ -148,8 +148,10 @@ echoConsole() {
 }
 
 logLog() {
-  echoConsole "LOG: $*";
-  echo "`$DATE` [$$] LOG: $*" >> $LOG_FILE;
+    if [ $LOG_LEVEL -ge $LOG_WARNING ]; then
+        echoConsole "LOG: $*";
+        echo "`$DATE` [$$] LOG: $*" >> $LOG_FILE;
+    fi;
 }
 
 logTrace() {
@@ -185,6 +187,7 @@ logError() {
         echo "ERROR:  $*";
         echo "`$DATE` [$$] ERROR: $*" >> $LOG_FILE;
     fi;
+    exit 1;
 }
 
 logFatal() {
@@ -201,7 +204,6 @@ checkUser() {
   logInfo "checkUser(): Beginning checkUser...";
   if (( `$ID -u` != 0 )); then 
     logError "checkUser(): Sorry, must be root; exiting."; 
-    exit 1;
   else
     logDebug "checkUser(): User is root, proceeding...";
   fi;
@@ -215,32 +217,32 @@ checkFields() {
   if [ $IMAGE_SIZE ] ; then
     logDebug "checkFields(): IMAGE_SIZE is set.";
   else
-    logFatal "checkFields(): IMAGE_SIZE is not set; exiting.";
+    logError "checkFields(): IMAGE_SIZE is not set; exiting.";
   fi;
 
   if [ $IMAGE_FS_TYPE ] ; then
     logDebug "checkFields(): IMAGE_FS_TYPE is set.";
   else
-    logFatal "checkFields(): IMAGE_FS_TYPE is not set; exiting.";
+    logError "checkFields(): IMAGE_FS_TYPE is not set; exiting.";
   fi;
 
   if [ $SPARSE_IMAGE_MOUNT ] ; then
     logDebug "checkFields(): SPARSE_IMAGE_MOUNT is set.";
   else
-    logFatal "checkFields(): SPARSE_IMAGE_MOUNT is not set; exiting.";
+    logError "checkFields(): SPARSE_IMAGE_MOUNT is not set; exiting.";
   fi;
 
   if [ $SPARSE_IMAGE_DIR ] ; then
     logDebug "checkFields(): SPARSE_IMAGE_DIR is set.";
   else
-    logFatal "checkFields(): SPARSE_IMAGE_DIR is not set; exiting.";
+    logError "checkFields(): SPARSE_IMAGE_DIR is not set; exiting.";
   fi;
 
   if [ $ENCRYPT = yes ] ; then
     if [ $PASSPHRASE ] ; then
       logInfo "checkFields(): Encrypting snapshot data.";
     else
-      logFatal "checkFields(): User specified encryption, but no PASSPHRASE; exiting."
+      logError "checkFields(): User specified encryption, but no PASSPHRASE; exiting."
     fi;
   fi;
 }
@@ -271,7 +273,6 @@ getLock() {
         if [ $? = 0 ] ; then
             # check name as well
             logError "getLock():Found running instance with PID=$PID; exiting.";
-            exit 1;
         else
             logDebug "getLock():Process $PID not found; deleting stale lockfile $LOCK_FILE";
             logTrace "getLock(): $RM $LOCK_FILE >> $LOG_FILE 2>&1";
@@ -392,23 +393,22 @@ createSparseImage() {
   else
     SPARSE_IMAGE_FILE=$SPARSE_IMAGE_FILE.raw;
   fi;
-  $ECHO "$SPARSE_IMAGE_FILE" > $SPARSE_IMAGE_STOR;
 
   logInfo "createSparseImage(): Initializing image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE...";
-
   logDebug "createSparseImage(): Creating file...";
   logTrace "createSparseImage(): $DD if=/dev/zero of=$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE bs=1 count=1 seek=$IMAGE_SIZE  >> $LOG_FILE 2>&1";
   `$DD if=/dev/zero of=$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE bs=1 count=1 seek=$IMAGE_SIZE  >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
-      logFatal "createSparseImage(): Unable to create sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE; exiting.";
+      logError "createSparseImage(): Unable to create sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE; exiting.";
   fi;
   logDebug "createSparseImage(): File creation complete.";
+  $ECHO "$SPARSE_IMAGE_FILE" > $SPARSE_IMAGE_STOR;
 
   logDebug "createSparseImage(): Attaching $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to loop...";
   logTrace "createSparseImage(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
   `$LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
-    logFatal "createSparseImage(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
+    logError "createSparseImage(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
   fi;
 
   logTrace "createSparseImage(): $LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1";
@@ -427,7 +427,7 @@ createSparseImage() {
     logTrace "createSparseImage(): $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1";
     `$ECHO $PASSPHRASE | $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
     if [ $? -ne 0 ] ; then
-      logFatal "createSparseImage(): Unable to map $LOOP to /dev/mapper/$SPARSE_IMAGE_FILE using $CRYPTSETUP; exiting.";
+      logError "createSparseImage(): Unable to map $LOOP to /dev/mapper/$SPARSE_IMAGE_FILE using $CRYPTSETUP; exiting.";
     fi;
     CRYPT="/dev/mapper/$SPARSE_IMAGE_FILE"; # prefix is constant
     $ECHO "$CRYPT" > $CRYPT_DEV_STOR;
@@ -448,7 +448,7 @@ createSparseImage() {
     logTrace "createSparseImage(): $MKDIR -p $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
     `$MKDIR -p $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
     if [ $? -ne 0 ] ; then
-        logFatal "createSparseImage(): Unable to create mount point $SPARSE_IMAGE_MOUNT; exiting.";
+        logError "createSparseImage(): Unable to create mount point $SPARSE_IMAGE_MOUNT; exiting.";
     fi;
     logDebug "createSparseImage(): Mount point creation done.";
   fi;
@@ -473,7 +473,7 @@ setupLoopDevice() {
       done;
       exec 0<&3;
     else
-      logFatal "setupLoopDevice(): Could not read loop device from file $LOOP_DEV_STOR; exiting.";
+      logError "setupLoopDevice(): Could not read loop device from file $LOOP_DEV_STOR; exiting.";
     fi;
   fi;
   
@@ -485,7 +485,7 @@ setupLoopDevice() {
     logTrace "setupLoopDevice(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
     `$LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE`;
     if [ $? -ne 0 ] ; then
-      logFatal "setupLoopDevice(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
+      logError "setupLoopDevice(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
     fi;
 
     logTrace "setupLoopDevice(): $LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1";
@@ -511,7 +511,7 @@ setupLoopDevice() {
         done;
         exec 0<&3;
       else
-        logFatal "setupLoopDevice(): Could not read loop device from file $CRYPT_DEV_STOR; exiting.";
+        logError "setupLoopDevice(): Could not read loop device from file $CRYPT_DEV_STOR; exiting.";
       fi;
     fi;
     if [ ! -e $CRYPT ] ; then
@@ -519,7 +519,7 @@ setupLoopDevice() {
       logTrace "createSparseImage(): $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1";
       `$ECHO $PASSPHRASE | $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
       if [ $? -ne 0 ] ; then
-        logFatal "createSparseImage(): Unable to map $LOOP to /dev/mapper/$SPARSE_IMAGE_FILE using $CRYPTSETUP; exiting.";
+        logError "createSparseImage(): Unable to map $LOOP to /dev/mapper/$SPARSE_IMAGE_FILE using $CRYPTSETUP; exiting.";
       fi;
       CRYPT="/dev/mapper/$SPARSE_IMAGE_FILE"; # prefix is constant
       $ECHO "$CRYPT" > $CRYPT_DEV_STOR;
@@ -540,7 +540,7 @@ mountSparseImageRW() {
   setupLoopDevice;
   logInfo "mountSparseImageRW(): Re-mounting $MOUNT_DEV to $SPARSE_IMAGE_MOUNT in readwrite...";
   if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
-      logFatal "mountSparseImageRW(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
+      logError "mountSparseImageRW(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
   fi;
 
   logDebug "mountSparseImageRW(): Attempting remount...";
@@ -551,7 +551,7 @@ mountSparseImageRW() {
       logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
       `$MOUNT -t $IMAGE_FS_TYPE -o rw,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
       if [ $? -ne 0 ] ; then
-        logFatal "mountSparseImageRW(): Could not re-mount $MOUNT_DEV to $SPARSE_IMAGE_MOUNT readwrite";
+        logError "mountSparseImageRW(): Could not re-mount $MOUNT_DEV to $SPARSE_IMAGE_MOUNT readwrite";
       fi;
   fi;
   logDebug "mountSparseImageRW(): Mount complete.";
@@ -566,7 +566,7 @@ mountSparseImageRO() {
   setupLoopDevice;
   logInfo "mountSparseImageRO(): Re-mounting $MOUNT_DEV to $SPARSE_IMAGE_MOUNT in readonly...";
   if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
-      logFatal "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
+      logError "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
   fi;
 
   logDebug "mountSparseImageRO(): Attempting remount...";
@@ -577,7 +577,7 @@ mountSparseImageRO() {
       logTrace "mountSparseImageRO(): $MOUNT -t $IMAGE_FS_TYPE -o ro,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
       `$MOUNT -t $IMAGE_FS_TYPE -o ro,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1`;
       if [ $? -ne 0 ] ; then
-        logFatal "mountSparseImageRO(): Could not re-mount $MOUNT_DEV to $SPARSE_IMAGE_MOUNT readonly";
+        logError "mountSparseImageRO(): Could not re-mount $MOUNT_DEV to $SPARSE_IMAGE_MOUNT readonly";
       fi;
   fi;
   logDebug "mountSparseImageRO(): Mount complete.";
@@ -656,7 +656,7 @@ makeHourlySnapshot() {
       $RSYNC_OPTS \
       /$SOURCE/ $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.0/ >> $LOG_FILE 2>&1;
   if [ $? -ne 0 ] ; then
-    logError "makeHourlySnapshot(): rsync encountered an error - continuing";
+    logWarn "makeHourlySnapshot(): rsync encountered an error; continuing ...";
   fi;
   logDebug "makeHourlySnapshot(): rsync complete.";
 
@@ -680,7 +680,7 @@ rotateDailySnapshot() {
   logInfo "rotateDailySnapshot(): Beginning rotateDailySnapshot...";
   if [ ! -d $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT ] ; then
         logDebug "rotateDailySnapshot(): ";
-        logWarn "rotateDailySnapshot(): Unable to begin daily rotate because the $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT file doesn't exist; returning ..."
+        logWarn "rotateDailySnapshot(): Unable to begin daily rotate because the $SPARSE_IMAGE_MOUNT/$SOURCE/hourly.$HOURLY_SNAP_LIMIT file doesn't exist; continuiing ..."
         return 1;
   fi;
 
@@ -733,7 +733,7 @@ rotateDailySnapshot() {
 rotateWeeklySnapshot() {
   logInfo "rotateWeeklySnapshot(): Beginning rotateWeeklySnapshot...";
   if [ ! -d $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT ] ; then
-        logWarn "rotateWeeklySnapshot(): Unable to begin weekly rotate because the $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT file doesn't exist; returning ..."
+        logWarn "rotateWeeklySnapshot(): Unable to begin weekly rotate because the $SPARSE_IMAGE_MOUNT/$SOURCE/daily.$DAILY_SNAP_LIMIT file doesn't exist; continuing ..."
         return 1;
   fi;
 
@@ -787,6 +787,7 @@ rotateWeeklySnapshot() {
 # grouping of precursor tasks
 #------------------------------------------------------------------------------
 startup() {
+  logLog "Backup starting...";
   logInfo "startup(): Beginning initialization...";
   checkUser;
   checkFields;
@@ -797,13 +798,19 @@ startup() {
     exec 0<"$SPARSE_IMAGE_STOR";
     while read -r SPARSE_IMAGE_FILE;
     do 
-      logDebug "startup(): Sparse image file info read from file $SPARSE_IMAGE_FILE";
+      logDebug "startup(): $SPARSE_IMAGE_STOR defines $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE for storage.";
       break;
     done;
     exec 0<&3;
   else
     logDebug "startup(): No sparse image file defined; creating new...";
     createSparseImage;
+  fi;
+
+  if [ $SPARSE_IMAGE_DIR -a -d $SPARSE_IMAGE_DIR ] ; then
+    logDebug "startup(): Sparse image directory $SPARSE_IMAGE_DIR exists.";
+  else
+    logError "startup(): Sparse image directory $SPARSE_IMAGE_DIR not found (is its device mounted?); exiting.";
   fi;
 
   if [ $SPARSE_IMAGE_DIR -a $SPARSE_IMAGE_FILE -a -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE -a -s $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE ] ; then
@@ -835,7 +842,7 @@ startup() {
     done;
     exec 0<&3;
   else
-    logFatal "startup(): Source listing is empty; verify entries in $INCLUDES";
+    logError "startup(): Source listing is empty; verify entries in $INCLUDES; exiting.";
   fi;
 
   logInfo "startup(): Done.";
@@ -855,14 +862,16 @@ shutdown() {
   logDebug "shutdown(): Syncing filesystem...";
   $SYNC; #ensure that changes to the backup imsage file are written-out
 
-  logInfo "shutdown(): Done.";
+  logLog "Backup completed successfully.";
+  logInfo "shutdown(): Done; exiting";
+
+  exit 0;
 }
 
 #------------------------------------------------------------------------------
 # Main
 #------------------------------------------------------------------------------
 main() {
-  logLog "main(): Script starting...";
 
   startup;
 
@@ -897,8 +906,6 @@ main() {
   exec 0<&3;
 
   shutdown;
-
-  logLog "main(): Script exiting successfully.";
 }
 
 #------------------------------------------------------------------------------
