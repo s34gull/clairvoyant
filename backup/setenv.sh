@@ -5,7 +5,7 @@
 #-----------------------------------------------------------------------
 #------------- User Logging Parameters ---------------------------------
 #-----------------------------------------------------------------------
-LOG_LEVEL=$LOG_INFO; # $LOG_TRACE > $LOG_DEBUG > $LOG_INFO > $LOG_WARNING > $LOG_ERROR > $LOG_FATAL
+LOG_LEVEL=$LOG_INFO; # $LOG_TRACE > $LOG_DEBUG > $LOG_INFO > $LOG_WARN > $LOG_ERROR > $LOG_FATAL
 SILENT=no; # no - print to console; yes - suppress console output
 
 #-----------------------------------------------------------------------

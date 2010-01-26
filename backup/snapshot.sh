@@ -108,7 +108,7 @@ WEEK_SEC=$(($DAY_SEC * 7));
 LOG_TRACE=5;
 LOG_DEBUG=4;
 LOG_INFO=3;
-LOG_WARNING=2;
+LOG_WARN=2;
 LOG_ERROR=1;
 LOG_FATAL=0;
 
@@ -116,7 +116,6 @@ LOG_FATAL=0;
 DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime"; 
 
 # Unset parameters (set within setup())
-SOURCES=;
 SOURCE=;
 LOOP_DEV=;
 CRYPT_DEV=;
@@ -159,7 +158,7 @@ echoConsole() {
 }
 
 logLog() {
-    if [ $LOG_LEVEL -ge $LOG_WARNING ]; then
+    if [ $LOG_LEVEL -ge $LOG_WARN ]; then
         echoConsole "LOG: $*";
         echo "`$DATE` [$$] LOG: $*" >> $LOG_FILE;
     fi;
@@ -187,7 +186,7 @@ logInfo() {
 }
 
 logWarn() {
-    if [ $LOG_LEVEL -ge $LOG_WARNING ]; then
+    if [ $LOG_LEVEL -ge $LOG_WARN ]; then
         echo "WARNING: $*";
         echo "`$DATE` [$$] WARNING: $*" >> $LOG_FILE;
     fi;
