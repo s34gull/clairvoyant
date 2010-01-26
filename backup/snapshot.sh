@@ -38,7 +38,6 @@ CUT=/usr/bin/cut;
 DD=/bin/dd;
 DATE=/bin/date;
 ECHO=/bin/echo;
-EXPR=/usr/bin/expr;
 FSCK=/sbin/fsck;
 GREP=/bin/grep;
 HASH=/usr/bin/md5sum;
@@ -101,9 +100,9 @@ WEEKLY_SNAP_LIMIT=51;
 
 # Time definitions
 NOW_SEC=`$DATE -u +%s`; # the current time
-HOUR_SEC=`$EXPR "60" "*" "60"`; # seconds per hourl
-DAY_SEC=`$EXPR "$HOUR_SEC" "*" "24"`; # seconds per day
-WEEK_SEC=`$EXPR "$DAY_SEC" "*" "7"`;
+HOUR_SEC=$((60 * 60)); # seconds per hourl
+DAY_SEC=$(($HOUR_SEC * 24)); # seconds per day
+WEEK_SEC=$(($DAY_SEC * 7));
 
 # LOGGING levels
 LOG_TRACE=5;
@@ -116,31 +115,43 @@ LOG_FATAL=0;
 # Default mounting options
 DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime"; 
 
-# Unset parameters (set within startup())
+# Unset parameters (set within setup())
 SOURCES=;
 SOURCE=;
-LOOP=;
-CRYPT=;
+LOOP_DEV=;
+CRYPT_DEV=;
 SPARSE_IMAGE_FILE=;
 MOUNT_DEV=;
 
-# Read in the user defined parameters
+# ----------------------------------------------------------------------
+# ------------- SOURCE USER-DEFINED VARIABLES ---------------------------------------
+# ----------------------------------------------------------------------
 . $CONFIG_DIR/setenv.sh;
 
-# Merge user and default settings
+
+# ----------------------------------------------------------------------
+# ------------- MERGED VARIABLES ---------------------------------------
+# ----------------------------------------------------------------------
+
+# Append user mount options to the defaults
 MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS,$USER_MOUNT_OPTIONS";
+
 # Computed Time intervals (in seconds)
 # default is one hour, - 10% for cron miss
-HOURLY_INTERVAL_SEC=`$EXPR "$HOUR_SEC" "*" "$HOUR_INTERVAL" "-" "$HOUR_SEC" "/" "10"`; 
+HOURLY_INTERVAL_SEC=$(($HOUR_SEC * $HOUR_INTERVAL - $HOUR_SEC / 10)); 
 # default is one day, - 1% for cron miss
-DAILY_INTERVAL_SEC=`$EXPR "$DAY_SEC" "*" "$DAY_INTERVAL" "-" "$DAY_SEC" "/" "100"`; 
+DAILY_INTERVAL_SEC=$(($DAY_SEC * $DAY_INTERVAL - $DAY_SEC / 100)); 
 # default is one week, - 1% for cron miss
-WEEKLY_INTERVAL_SEC=`$EXPR "$WEEK_SEC" "*" "$WEEK_INTERVAL" "-" "$WEEK_SEC" "/" "100"`;
+WEEKLY_INTERVAL_SEC=$(($WEEK_SEC * $WEEK_INTERVAL - $WEEK_SEC / 100));
 
 #-----------------------------------------------------------------------
 #------------- FUNCTIONS -----------------------------------------------
 #-----------------------------------------------------------------------
 
+#-----------------------------------------------------------------------
+# Logging functions; all output is echo'd to console and/or appended to
+# $LOG_FILE
+#-----------------------------------------------------------------------
 echoConsole() {
     if [ $SILENT = no ]; then
         echo $1;
@@ -198,7 +209,8 @@ logFatal() {
 }
 
 #------------------------------------------------------------------------------
-# make sure we're running as root
+# checkUser()
+#    make sure we're running as root
 #------------------------------------------------------------------------------
 checkUser() {
   logInfo "checkUser(): Beginning checkUser...";
@@ -211,7 +223,8 @@ checkUser() {
 }
 
 #------------------------------------------------------------------------------
-# ensure that required fields are set
+# checkFields()
+#    ensure that required fields are set
 #------------------------------------------------------------------------------
 checkFields() {
   if [ $IMAGE_SIZE ] ; then
@@ -248,7 +261,9 @@ checkFields() {
 }
 
 #------------------------------------------------------------------------------
-# check for or create PID-based lockfile
+# getLock()
+#    Check for or create PID-based lockfile; if it exists note its presence and
+#    exit(1) to avoid running multiple backups simultaneously.
 #------------------------------------------------------------------------------
 getLock() {
   logInfo "getLock(): Beginning getLock...";
@@ -295,7 +310,8 @@ getLock() {
 }
 
 #------------------------------------------------------------------------------
-# make sure we don't perform an hourly snapshot prematurely
+# checkHourlyInterval()
+#    Make sure we don't perform an hourly snapshot prematurely
 #------------------------------------------------------------------------------
 checkHourlyInterval() {
   logInfo "checkHourlyInterval(): Beginning checkHourlyInterval";
@@ -304,7 +320,7 @@ checkHourlyInterval() {
     exec 0<"$HOURLY_LAST";
     while read -r LAST;
     do 
-      if (( $NOW_SEC < $[$LAST+$HOURLY_INTERVAL_SEC] )) ; then
+      if (( $NOW_SEC < $(($LAST + $HOURLY_INTERVAL_SEC)) )) ; then
         logInfo "checkHourlyInterval(): Will not perform hourly rotate; last hourly rotate occurred within $HOUR_INTERVAL hours.";
         PERFORM_HOURLY_SNAPSHOT=no;
       else
@@ -320,7 +336,8 @@ checkHourlyInterval() {
 }
 
 #------------------------------------------------------------------------------
-# make sure we don't perform a daily rotate prematurely
+# checkDaillyInterval()
+#    Make sure we don't perform a daily rotate prematurely
 #------------------------------------------------------------------------------
 checkDailyInterval() {
   logInfo "checkDailyInterval(): Beginning checkDailyInterval...";
@@ -329,7 +346,7 @@ checkDailyInterval() {
     exec 0<"$DAILY_LAST";
     while read -r LAST;
     do 
-      if (( $NOW_SEC < $[$LAST+$DAILY_INTERVAL_SEC] )) ; then
+      if (( $NOW_SEC < $(($LAST + $DAILY_INTERVAL_SEC)) )) ; then
         logInfo "checkDailyInterval(): Will not perform daily rotate; last daily rotate occurred within $DAY_INTERVAL day(s)";
         PERFORM_DAILY_ROTATE=no;
       else
@@ -345,7 +362,8 @@ checkDailyInterval() {
 }
 
 #------------------------------------------------------------------------------
-# make sure we don't perform a weekly rotate prematurely
+# checkWeeklyInterval()
+#    Make sure we don't perform a weekly rotate prematurely
 #------------------------------------------------------------------------------
 checkWeeklyInterval() {
   logInfo "checkWeeklyInterval(): Beginning checkWeeklyInterval...";
@@ -354,7 +372,7 @@ checkWeeklyInterval() {
     exec 0<"$WEEKLY_LAST";
     while read -r LAST;
     do 
-      if (( $NOW_SEC < $[$LAST+$WEEKLY_INTERVAL_SEC] )) ; then
+      if (( $NOW_SEC < $(($LAST + $WEEKLY_INTERVAL_SEC)) )) ; then
         logInfo "checkWeeklyInterval(): Will not perform weekly rotate; last weekly rotate occurred within $WEEK_INTERVAL week(s).";
         PERFORM_WEEKLY_ROTATE=no;
       else
@@ -370,10 +388,11 @@ checkWeeklyInterval() {
 }
 
 #-----------------------------------------------------------------------
-# Create a sparse disk image (sparse file, with partition table and user
-# specified file system (ext4 > ext3)) and record its name.
-# The name format is $HOSTNAME.$HASH($HOSTNAME+$RANDOM+$DATE).raw.
-# Once created, make it available via /dev/mapper via kparx.
+# createSparseImage()
+#    Create a sparse disk image (sparse file, with partition table and 
+#    user specified file system (ext4 > ext3)) and record its name.
+#    The name format is $HOSTNAME.$HASH($HOSTNAME+$RANDOM+$DATE).raw.
+#    Once created, make it available via /dev/mapper via kparx.
 #-----------------------------------------------------------------------
 createSparseImage() {
   logInfo "createSparseImage(): Creating new sparse image file for snapshots...";
@@ -412,26 +431,26 @@ createSparseImage() {
   fi;
 
   logTrace "createSparseImage(): $LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1";
-  LOOP=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
-  logDebug "createSparseImage(): Attached $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to $LOOP";
-  $ECHO "$LOOP" > $LOOP_DEV_STOR;
-  MOUNT_DEV=$LOOP;
+  LOOP_DEV=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
+  logDebug "createSparseImage(): Attached $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to $LOOP_DEV";
+  $ECHO "$LOOP_DEV" > $LOOP_DEV_STOR;
+  MOUNT_DEV=$LOOP_DEV;
 
   if [ $ENCRYPT = yes ] ; then
     logDebug "createSparseImage(): Enryption requested; using $CRYPTSETUP.";
-    logTrace "createSparseImage(): $CRYPTSETUP luksFormat --batch-mode $LOOP >> $LOG_FILE 2>&1";
-    `$ECHO $PASSPHRASE | $CRYPTSETUP luksFormat --batch-mode $LOOP >> $LOG_FILE 2>&1`;
+    logTrace "createSparseImage(): $CRYPTSETUP luksFormat --batch-mode $LOOP_DEV >> $LOG_FILE 2>&1";
+    `$ECHO $PASSPHRASE | $CRYPTSETUP luksFormat --batch-mode $LOOP_DEV >> $LOG_FILE 2>&1`;
     if [ $? -ne 0 ] ; then
-      logFatal "createSparseImage(): Unable to encrypt $LOOP using $CRYPTSETUP; exiting.";
+      logFatal "createSparseImage(): Unable to encrypt $LOOP_DEV using $CRYPTSETUP; exiting.";
     fi;
-    logTrace "createSparseImage(): $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1";
-    `$ECHO $PASSPHRASE | $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
+    logTrace "createSparseImage(): $CRYPTSETUP luksOpen $LOOP_DEV $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1";
+    `$ECHO $PASSPHRASE | $CRYPTSETUP luksOpen $LOOP_DEV $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
     if [ $? -ne 0 ] ; then
-      logError "createSparseImage(): Unable to map $LOOP to /dev/mapper/$SPARSE_IMAGE_FILE using $CRYPTSETUP; exiting.";
+      logError "createSparseImage(): Unable to map $LOOP_DEV to /dev/mapper/$SPARSE_IMAGE_FILE using $CRYPTSETUP; exiting.";
     fi;
-    CRYPT="/dev/mapper/$SPARSE_IMAGE_FILE"; # prefix is constant
-    $ECHO "$CRYPT" > $CRYPT_DEV_STOR;
-    MOUNT_DEV=$CRYPT;
+    CRYPT_DEV="/dev/mapper/$SPARSE_IMAGE_FILE"; # prefix is constant
+    $ECHO "$CRYPT_DEV" > $CRYPT_DEV_STOR;
+    MOUNT_DEV=$CRYPT_DEV;
   fi;
 
   logDebug "createSparseImage(): Creating $IMAGE_FS_TYPE fs on $MOUNT_DEV...";
@@ -457,18 +476,19 @@ createSparseImage() {
 }
 
 #-----------------------------------------------------------------------
-# After a (re)boot, no loopback devices are preserved. This function
-# attempts to check for an existing sparse diskimage mapping and will
-# create one if it doesn't exist. This must happen before mounting.
+# setupLoopDevice()
+#    After a (re)boot, no loopback devices are preserved. This function
+#    attempts to check for an existing sparse diskimage mapping and will
+#    create one if it doesn't exist. This must happen before mounting.
 #-----------------------------------------------------------------------
 setupLoopDevice() {
-  if [ ! $LOOP ] ; then
+  if [ ! $LOOP_DEV ] ; then
     if [ $LOOP_DEV_STOR -a -f $LOOP_DEV_STOR -a -s $LOOP_DEV_STOR ] ; then
       exec 3<&0;
       exec 0<"$LOOP_DEV_STOR";
-      while read -r LOOP;
+      while read -r LOOP_DEV;
       do 
-        logDebug "setupLoopDevice(): Read loop device from file ($LOOP)";
+        logDebug "setupLoopDevice(): Read loop device from file ($LOOP_DEV)";
         break;
       done;
       exec 0<&3;
@@ -477,8 +497,8 @@ setupLoopDevice() {
     fi;
   fi;
   
-  logTrace "setupLoopDevice(): LOOP_EXISTS=$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $GREP $LOOP | $WC -c";
-  LOOP_EXISTS=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $GREP "$LOOP" | $WC -c`;
+  logTrace "setupLoopDevice(): LOOP_EXISTS=$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $GREP $LOOP_DEV | $WC -c";
+  LOOP_EXISTS=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $GREP "$LOOP_DEV" | $WC -c`;
 
   if [ $LOOP_EXISTS = 0 ] ; then
     logDebug "setupLoopDevice(): Attaching $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to loop...";
@@ -489,24 +509,24 @@ setupLoopDevice() {
     fi;
 
     logTrace "setupLoopDevice(): $LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1";
-    LOOP=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
+    LOOP_DEV=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
 
-    logDebug "setupLoopDevice(): Attached $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to $LOOP";
-    $ECHO "$LOOP" > $LOOP_DEV_STOR;
+    logDebug "setupLoopDevice(): Attached $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to $LOOP_DEV";
+    $ECHO "$LOOP_DEV" > $LOOP_DEV_STOR;
   else
-    logDebug "setupLoopDevice(): $LOOP appears to exist, skipping.";
+    logDebug "setupLoopDevice(): $LOOP_DEV appears to exist, skipping.";
   fi;
-  MOUNT_DEV=$LOOP;
+  MOUNT_DEV=$LOOP_DEV;
   
 
   if [ $ENCRYPT = yes ] ; then
-    if [ ! $CRYPT ] ; then
+    if [ ! $CRYPT_DEV ] ; then
       if [ $CRYPT_DEV_STOR -a -f $CRYPT_DEV_STOR -a -s $CRYPT_DEV_STOR ] ; then
         exec 3<&0;
         exec 0<"$CRYPT_DEV_STOR";
-        while read -r CRYPT;
+        while read -r CRYPT_DEV;
         do 
-          logDebug "setupLoopDevice(): Read loop device from file ($CRYPT)";
+          logDebug "setupLoopDevice(): Read loop device from file ($CRYPT_DEV)";
           break;
         done;
         exec 0<&3;
@@ -514,19 +534,19 @@ setupLoopDevice() {
         logError "setupLoopDevice(): Could not read loop device from file $CRYPT_DEV_STOR; exiting.";
       fi;
     fi;
-    if [ ! -e $CRYPT ] ; then
-      logDebug "createSparseImage(): Enryption requested; using $CRYPTSETUP to setup mapping.";
-      logTrace "createSparseImage(): $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1";
-      `$ECHO $PASSPHRASE | $CRYPTSETUP luksOpen $LOOP $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
+    if [ ! -e $CRYPT_DEV ] ; then
+      logDebug "setupLoopDevice(): Enryption requested; using $CRYPTSETUP to setup mapping.";
+      logTrace "setupLoopDevice(): $CRYPTSETUP luksOpen $LOOP_DEV $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1";
+      `$ECHO $PASSPHRASE | $CRYPTSETUP luksOpen $LOOP_DEV $SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
       if [ $? -ne 0 ] ; then
-        logError "createSparseImage(): Unable to map $LOOP to /dev/mapper/$SPARSE_IMAGE_FILE using $CRYPTSETUP; exiting.";
+        logError "setupLoopDevice(): Unable to map $LOOP_DEV to /dev/mapper/$SPARSE_IMAGE_FILE using $CRYPTSETUP; exiting.";
       fi;
-      CRYPT="/dev/mapper/$SPARSE_IMAGE_FILE"; # prefix is constant
-      $ECHO "$CRYPT" > $CRYPT_DEV_STOR;
+      CRYPT_DEV="/dev/mapper/$SPARSE_IMAGE_FILE"; # prefix is constant
+      $ECHO "$CRYPT_DEV" > $CRYPT_DEV_STOR;
     else
-      logDebug "setupLoopDevice(): $CRYPT appears to exist, skipping.";
+      logDebug "setupLoopDevice(): $CRYPT_DEV appears to exist, skipping.";
     fi;
-    MOUNT_DEV=$CRYPT;
+    MOUNT_DEV=$CRYPT_DEV;
   fi;
 
   logInfo "setupLoopDevice(): $MOUNT_DEV is ready.";
@@ -534,7 +554,9 @@ setupLoopDevice() {
 
 
 #------------------------------------------------------------------------------
-# attempt to remount the RW mount point as RW; else abort
+# mountSparseImageRW()
+#    Attempt to remount the sparse image to its mount point as read-write;
+#    If unable to do so, exit(1).
 #------------------------------------------------------------------------------
 mountSparseImageRW() {
   setupLoopDevice;
@@ -560,7 +582,8 @@ mountSparseImageRW() {
 }
 
 #------------------------------------------------------------------------------
-# now remount the RW snapshot mountpoint as readonly
+# mountSparseImageRO()
+#    Attempt to (re)mount the sparse image to its mount point as readonly.
 #------------------------------------------------------------------------------
 mountSparseImageRO() {
   setupLoopDevice;
@@ -587,7 +610,15 @@ mountSparseImageRO() {
 
 
 #------------------------------------------------------------------------------
-# rotating snapshots of /home (fixme: this should be more general)
+# makeHourlySnapshot()
+#    Operates on the $SOURCE directory and its children.
+#    Delete the previous $HOURLY_SNAP_LIMIT snapshot; 
+#      then rotate earlier (1 .. $HOURLY_SNAP_LIMIT-1; increment each by 1) 
+#        hourly snapshots of $SOURCE;
+#      then copy hourly.0 to hourly.1 using hardlinks;
+#      then rsync $SOURCE into hourly.0 updating and deleting changed files. 
+#
+#    !!! $SOURCE must be setup by calling function. !!!
 #------------------------------------------------------------------------------
 makeHourlySnapshot() {
   logInfo "makeHourlySnapshot(): Beginning makeHourlySnapshot...";
@@ -669,12 +700,19 @@ makeHourlySnapshot() {
   $TOUCH $HOURLY_LAST;
   $ECHO "`$DATE -u +%s`" > $HOURLY_LAST;
 
-  # and thats it for home.
+  # and thats it for now.
   logInfo "makeHourlySnapshot(): Done.";
 }
 
 #------------------------------------------------------------------------------
-# rotate the earlier dailies and rename  the oldest hourly to daily.0
+# rotateDailySnapshot()
+#    Operates on the $SOURCE directory and its children.
+#    Delete the previous $DAILY_SNAP_LIMIT snapshot; 
+#      then rotate earlier (0 .. $DAILY_SNAP_LIMIT-1; increment each by 1) 
+#        daily snapshots of $SOURCE;
+#      then rename hourly.$HOURLY_SNAP_LIMIT to daily.0 
+#
+#    !!! $SOURCE must be setup by calling function. !!!
 #------------------------------------------------------------------------------
 rotateDailySnapshot() {
   logInfo "rotateDailySnapshot(): Beginning rotateDailySnapshot...";
@@ -728,7 +766,14 @@ rotateDailySnapshot() {
 }
 
 #------------------------------------------------------------------------------
-# rotate the earlier weklies and rename the oldest daily to weekly.0
+# rotateWeeklySnapshot()
+#    Operates on the $SOURCE directory and its children.
+#    Delete the previous $WEEKLY_SNAP_LIMIT snapshot; 
+#      then rotate earlier (0 .. $WEEKLY_SNAP_LIMIT-1; increment each by 1) 
+#        weekly snapshots of $SOURCE;
+#      then rename daily.$DAILY_SNAP_LIMIT to weekly.0 
+#
+#    !!! $SOURCE must be setup by calling function. !!!
 #------------------------------------------------------------------------------
 rotateWeeklySnapshot() {
   logInfo "rotateWeeklySnapshot(): Beginning rotateWeeklySnapshot...";
@@ -783,12 +828,15 @@ rotateWeeklySnapshot() {
 #------------------------------------------------------------------------------
 #------------- ORCHESTRATING FUNCTIONS ----------------------------------------
 #------------------------------------------------------------------------------
+
 #------------------------------------------------------------------------------
-# grouping of precursor tasks
+# setup()
+#    Grouping of setup tasks (user check, sparse image creation, interval 
+#    checking, etc.)
 #------------------------------------------------------------------------------
-startup() {
-  logLog "Backup starting...";
-  logInfo "startup(): Beginning initialization...";
+setup() {
+
+  logInfo "setup(): Beginning setup ...";
   checkUser;
   checkFields;
   getLock;
@@ -798,29 +846,29 @@ startup() {
     exec 0<"$SPARSE_IMAGE_STOR";
     while read -r SPARSE_IMAGE_FILE;
     do 
-      logDebug "startup(): $SPARSE_IMAGE_STOR defines $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE for storage.";
+      logDebug "setup(): $SPARSE_IMAGE_STOR defines $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE for storage.";
       break;
     done;
     exec 0<&3;
   else
-    logDebug "startup(): No sparse image file defined; creating new...";
+    logDebug "setup(): No sparse image file defined; creating new...";
     createSparseImage;
   fi;
 
   if [ $SPARSE_IMAGE_DIR -a -d $SPARSE_IMAGE_DIR ] ; then
-    logDebug "startup(): Sparse image directory $SPARSE_IMAGE_DIR exists.";
+    logDebug "setup(): Sparse image directory $SPARSE_IMAGE_DIR exists.";
   else
-    logError "startup(): Sparse image directory $SPARSE_IMAGE_DIR not found (is its device mounted?); exiting.";
+    logError "setup(): Sparse image directory $SPARSE_IMAGE_DIR not found (is its device mounted?); exiting.";
   fi;
 
   if [ $SPARSE_IMAGE_DIR -a $SPARSE_IMAGE_FILE -a -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE -a -s $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE ] ; then
-    logDebug "startup(): Sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE exists.";
+    logDebug "setup(): Sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE exists.";
   else
-    logWarn "startup(): Sparse image file  $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE not found; creating new...";
+    logWarn "setup(): Sparse image file  $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE not found; creating new...";
     createSparseImage;
   fi;
 
-  logInfo "startup(): Using sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
+  logInfo "setup(): Using sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
 
   checkWeeklyInterval;
   checkDailyInterval;
@@ -834,46 +882,55 @@ startup() {
     while read -r SOURCE;
     do
       if [ ! -d $SPARSE_IMAGE_MOUNT/$SOURCE ] ; then
-        logDebug "startup(): Creating new snapshot directory $SPARSE_IMAGE_MOUNT/$SOURCE";
-        logTrace "startup(): $MKDIR -p $SPARSE_IMAGE_MOUNT/$SOURCE >> $LOG_FILE 2>&1";
+        logDebug "setup(): Creating new snapshot directory $SPARSE_IMAGE_MOUNT/$SOURCE";
+        logTrace "setup(): $MKDIR -p $SPARSE_IMAGE_MOUNT/$SOURCE >> $LOG_FILE 2>&1";
         $MKDIR -p $SPARSE_IMAGE_MOUNT/$SOURCE >> $LOG_FILE 2>&1;
       fi;
-      logDebug "startup(): Will take snapshot of /$SOURCE.";
+      logDebug "setup(): Will take snapshot of /$SOURCE.";
     done;
     exec 0<&3;
   else
-    logError "startup(): Source listing is empty; verify entries in $INCLUDES; exiting.";
+    logError "setup(): Source listing is empty; verify entries in $INCLUDES; exiting.";
   fi;
 
-  logInfo "startup(): Done.";
+  logInfo "setup(): Done.";
 }
 
 #------------------------------------------------------------------------------
-# delete $LOCK_FILE and mount readonly
+# teardown()
+#    delete $LOCK_FILE and mount readonly
 #------------------------------------------------------------------------------
-shutdown() {
-  logInfo "shutdown(): Shutting down...";
+teardown() {
+  logInfo "teardown(): Beginning teardown ...";
 
   mountSparseImageRO;
 
-  logDebug "shutdown(): Removing lock file $LOCK_FILE..."
+  logDebug "teardown(): Removing lock file $LOCK_FILE..."
   $RM $LOCK_FILE
   
-  logDebug "shutdown(): Syncing filesystem...";
+  logDebug "teardown(): Syncing filesystem...";
   $SYNC; #ensure that changes to the backup imsage file are written-out
 
-  logLog "Backup completed successfully.";
-  logInfo "shutdown(): Done; exiting";
-
-  exit 0;
+  logInfo "teardown(): Done.";
 }
 
 #------------------------------------------------------------------------------
-# Main
+# main()
+#    Function responsible for overal orchestration of other functions when
+#    when performing a backup. The order of operations is important due to
+#    copies and renames which take place: 
+#      1) rotate weeklies; 
+#      2) rotate dailies;
+#      3) take hourly snapshot.
+#    Note that each entry in the $INCLUDES is backed up in this order 
+#    serially (otherwise we'd create I/O contention).
+#    
 #------------------------------------------------------------------------------
 main() {
 
-  startup;
+  logLog "Backup starting...";
+  
+  setup;
 
   exec 3<&0;
   exec 0<"$INCLUDES";
@@ -905,7 +962,11 @@ main() {
   done;
   exec 0<&3;
 
-  shutdown;
+  teardown;
+  
+  logLog "Backup complete.";
+  
+  exit 0;
 }
 
 #------------------------------------------------------------------------------
