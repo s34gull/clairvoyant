@@ -824,6 +824,7 @@ makeHourlySnapshot() {
   # step 5: update the mtime of hourly.0 to reflect the snapshot time
   logTrace "makeHourlySnapshot(): $TOUCH $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/";
   $TOUCH $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ ;
+  $TOUCH $SPARSE_IMAGE_MOUNT/hourly.0/;
 
   # TODO implement cleanup for cases where rsync failed; 
   # previous renames need to be undone
@@ -995,6 +996,8 @@ main() {
   logLog "Backup starting...";
   
   setup;
+
+  pruneSnapshots;
 
   rotateSnapshots;
 
