@@ -60,7 +60,7 @@ WC=/usr/bin/wc;
 # If we need encryption
 CRYPTSETUP=/sbin/cryptsetup
 
-# The semantics of kill can differ; either -n (Ubuntu) or -s (RHEL/Centos)
+# The syntax of kill can differ; either -n (Ubuntu) or -s (RHEL/Centos)
 # Make appropriate change here.
 TEST_PROCESS="$KILL -n 0";
 
@@ -123,7 +123,7 @@ SPARSE_IMAGE_FILE=;
 MOUNT_DEV=;
 
 # ----------------------------------------------------------------------
-# ------------- SOURCE USER-DEFINED VARIABLES ---------------------------------------
+# ------------- SOURCE USER-DEFINED VARIABLES --------------------------
 # ----------------------------------------------------------------------
 . $CONFIG_DIR/setenv.sh;
 
@@ -207,10 +207,10 @@ logFatal() {
     exit 2;
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # checkUser()
 #    make sure we're running as root
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 checkUser() {
   logInfo "checkUser(): Beginning checkUser...";
   if (( `$ID -u` != 0 )); then 
@@ -221,10 +221,10 @@ checkUser() {
   logInfo "checkUser(): Done.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # checkFields()
 #    ensure that required fields are set
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 checkFields() {
   if [ $IMAGE_SIZE ] ; then
     logDebug "checkFields(): IMAGE_SIZE is set.";
@@ -259,11 +259,12 @@ checkFields() {
   fi;
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # getLock()
-#    Check for or create PID-based lockfile; if it exists note its presence and
-#    exit(1) to avoid running multiple backups simultaneously.
-#------------------------------------------------------------------------------
+#    Check for or create PID-based lockfile; if it exists note its 
+#    presence and exit(1) to avoid running multiple backups 
+#    simultaneously.
+#-----------------------------------------------------------------------
 getLock() {
   logInfo "getLock(): Beginning getLock...";
   if [ ! -d $LOCK_DIR ] ; then
@@ -308,10 +309,10 @@ getLock() {
   logInfo "getLock(): Done.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # checkHourlyInterval()
 #    Make sure we don't perform an hourly snapshot prematurely
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 checkHourlyInterval() {
   logInfo "checkHourlyInterval(): Beginning checkHourlyInterval";
   if [ $HOURLY_LAST -a -f $HOURLY_LAST -a -s $HOURLY_LAST ] ; then
@@ -334,10 +335,10 @@ checkHourlyInterval() {
   logInfo "checkHourlyInterval(): Done.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # checkDaillyInterval()
 #    Make sure we don't perform a daily rotate prematurely
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 checkDailyInterval() {
   logInfo "checkDailyInterval(): Beginning checkDailyInterval...";
   if [ $DAILY_LAST -a -f $DAILY_LAST -a -s $DAILY_LAST ] ; then
@@ -360,10 +361,10 @@ checkDailyInterval() {
   logInfo "checkDailyInterval(): Done.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # checkWeeklyInterval()
 #    Make sure we don't perform a weekly rotate prematurely
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 checkWeeklyInterval() {
   logInfo "checkWeeklyInterval(): Beginning checkWeeklyInterval...";
   if [ $WEEKLY_LAST -a -f $WEEKLY_LAST -a -s $WEEKLY_LAST ] ; then
@@ -552,11 +553,11 @@ setupLoopDevice() {
 }
 
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # mountSparseImageRW()
-#    Attempt to remount the sparse image to its mount point as read-write;
-#    If unable to do so, exit(1).
-#------------------------------------------------------------------------------
+#    Attempt to remount the sparse image to its mount point as 
+#    read-write; If unable to do so, exit(1).
+#-----------------------------------------------------------------------
 mountSparseImageRW() {
   setupLoopDevice;
   logInfo "mountSparseImageRW(): Re-mounting $MOUNT_DEV to $SPARSE_IMAGE_MOUNT in readwrite...";
@@ -580,10 +581,11 @@ mountSparseImageRW() {
   logInfo "mountSparseImageRW(): Done.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # mountSparseImageRO()
-#    Attempt to (re)mount the sparse image to its mount point as readonly.
-#------------------------------------------------------------------------------
+#    Attempt to (re)mount the sparse image to its mount point as 
+#    read-only.
+#-----------------------------------------------------------------------
 mountSparseImageRO() {
   setupLoopDevice;
   logInfo "mountSparseImageRO(): Re-mounting $MOUNT_DEV to $SPARSE_IMAGE_MOUNT in readonly...";
@@ -607,6 +609,10 @@ mountSparseImageRO() {
   logInfo "mountSparseImageRO(): Done.";
 }
 
+#-----------------------------------------------------------------------
+# pruneWeeklySnapshots()
+#    Deletes the $SPARSE_IMAGE_MOUNT/weekly.$WEEKLY_SNAP_LIMIT+1.
+#-----------------------------------------------------------------------
 pruneWeeklySnapshots() {
   # step 1: delete the oldest weekly snapshot, if it exists:
   if [ -d $SPARSE_IMAGE_MOUNT/weekly.$(($WEEKLY_SNAP_LIMIT+1)) ] ; then
@@ -620,6 +626,10 @@ pruneWeeklySnapshots() {
   fi ;
 }
 
+#-----------------------------------------------------------------------
+# pruneDailySnapshots()
+#    Deletes the $SPARSE_IMAGE_MOUNT/daily.$DAILY_SNAP_LIMIT+1.
+#-----------------------------------------------------------------------
 pruneDailySnapshots() {
   # step 2: delete the oldest daily snapshot, if it exists:
   if [ -d $SPARSE_IMAGE_MOUNT/daily.$(($DAILY_SNAP_LIMIT+1)) ] ; then
@@ -633,6 +643,10 @@ pruneDailySnapshots() {
   fi ;
 }
 
+#-----------------------------------------------------------------------
+# pruneHourlySnapshots()
+#    Deletes the $SPARSE_IMAGE_MOUNT/hourly.$HOURLY_SNAP_LIMIT+1.
+#-----------------------------------------------------------------------
 pruneHourlySnapshots() {
   # step 3: delete the oldest hourly snapshot, if it exists:
   if [ -d $SPARSE_IMAGE_MOUNT/hourly.$(($HOURLY_SNAP_LIMIT+1)) ] ; then
@@ -646,16 +660,12 @@ pruneHourlySnapshots() {
   fi ;
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # rotateHourlySnapshot()
-#    Operates on the $SOURCE directory and its children.
-#    Delete the previous $DAILY_SNAP_LIMIT snapshot; 
-#      then rotate earlier (0 .. $DAILY_SNAP_LIMIT-1; increment each by 1) 
-#        daily snapshots of $SOURCE;
-#      then rename hourly.$HOURLY_SNAP_LIMIT to daily.0 
-#
-#    !!! $SOURCE must be setup by calling function. !!!
-#------------------------------------------------------------------------------
+#    Operates on the $SPARSE_IMAGE_MOUNT/hourly.[0-$HOURLY_SNAP_LIMIT].
+#    Shift hourly snapshots forward by one, then
+#      use copy hourly.0 to hourly.1
+#-----------------------------------------------------------------------
 rotateHourlySnapshot() {
   logInfo "rotateHourlySnapshot(): Beginning rotateHourlySnapshot ...";
 
@@ -690,16 +700,12 @@ rotateHourlySnapshot() {
   logInfo "rotateHourlySnapshot(): Done.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # rotateDailySnapshot()
-#    Operates on the $SOURCE directory and its children.
-#    Delete the previous $DAILY_SNAP_LIMIT snapshot; 
-#      then rotate earlier (0 .. $DAILY_SNAP_LIMIT-1; increment each by 1) 
-#        daily snapshots of $SOURCE;
-#      then rename hourly.$HOURLY_SNAP_LIMIT to daily.0 
-#
-#    !!! $SOURCE must be setup by calling function. !!!
-#------------------------------------------------------------------------------
+#    Operates on the $SPARSE_IMAGE_MOUNT/dailiy.[0-$DAILY_SNAP_LIMIT].
+#    Shift hourly snapshots forward by one, then
+#      rename hourly.$HOURLY_SNAP_LIMIT+1 to daily.0
+#-----------------------------------------------------------------------
 rotateDailySnapshot() {
   logInfo "rotateDailySnapshot(): Beginning rotateDailySnapshot...";
 
@@ -733,16 +739,12 @@ rotateDailySnapshot() {
   logInfo "rotateDailySnapshot(): Done.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # rotateWeeklySnapshot()
-#    Operates on the $SOURCE directory and its children.
-#    Delete the previous $WEEKLY_SNAP_LIMIT snapshot; 
-#      then rotate earlier (0 .. $WEEKLY_SNAP_LIMIT-1; increment each by 1) 
-#        weekly snapshots of $SOURCE;
-#      then rename daily.$DAILY_SNAP_LIMIT to weekly.0 
-#
-#    !!! $SOURCE must be setup by calling function. !!!
-#------------------------------------------------------------------------------
+#    Operates on the $SPARSE_IMAGE_MOUNT/weekly.[0-$WEEKLY_SNAP_LIMIT].
+#    Shift weekly snapshots forward by one, then
+#      rename daily.$DAILY_SNAP_LIMIT+1 to weekly.0
+#-----------------------------------------------------------------------
 rotateWeeklySnapshot() {
   logInfo "rotateWeeklySnapshot(): Beginning rotateWeeklySnapshot...";
 
@@ -777,28 +779,27 @@ rotateWeeklySnapshot() {
   logInfo "rotateWeeklySnapshot(): Done.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # makeHourlySnapshot()
-#    Operates on the $SOURCE directory and its children.
-#    Delete the previous $HOURLY_SNAP_LIMIT snapshot; 
-#      then rotate earlier (1 .. $HOURLY_SNAP_LIMIT-1; increment each by 1) 
-#        hourly snapshots of $SOURCE;
-#      then copy hourly.0 to hourly.1 using hardlinks;
-#      then rsync $SOURCE into hourly.0 updating and deleting changed files. 
+#   rsync $SOURCE into $SPARSE_IMAGE_MOUNT/hourly.0 updating and 
+#   deleting changed files. Notice that rsync behaves like 
+#   `cp --remove-destination` by default, so the destinationis unlinked
+#   first.  If it were not so, this would copy over the other snapshot(s)
+#   too! Also note the `--exclude-from` argument: rsync will ignore
+#   files/dirs in $EXCLUDES/$SOURCE.exclude; so each entry within 
+#   $INCLUDE should have a corresponsing .exclude (replacing '/' with 
+#   '.')file.
 #
-#    !!! $SOURCE must be setup by calling function. !!!
-#------------------------------------------------------------------------------
+#   !!! $SOURCE must be setup by calling function. !!!
+#-----------------------------------------------------------------------
 makeHourlySnapshot() {
   logInfo "makeHourlySnapshot(): Beginning makeHourlySnapshot...";
 
-  # step 1: rsync from the system into the latest snapshot (notice that
-  # rsync behaves like cp --remove-destination by default, so the destination
-  # is unlinked first.  If it were not so, this would copy over the other
-  # snapshot(s) too! Also note the --exclude-from argument: rsync will ignore
-  # files/dirs in $EXCLUDES/$SOURCE.exclude; so each entry within $INCLUDE
-  # should have a corresponsing .exclude file.
+  # step 1: extrapolate the exclude filename from $SOURCE
   EXCLUDE_FILE=`$ECHO "$SOURCE" | $SED "s/\//./g"`
   EXCLUDE_FILE=$EXCLUDE_FILE.exclude
+  
+  # step 2: define rsync options
   RSYNC_OPTS="--archive --sparse --partial --delete --delete-excluded \
       --exclude-from=$EXCLUDE_DIR/$EXCLUDE_FILE";
 
@@ -809,41 +810,40 @@ makeHourlySnapshot() {
   if [ $LOG_LEVEL -ge $LOG_TRACE ]; then
     RSYNC_OPTS="--progress $RSYNC_OPTS";
   fi;
+  
+  # step #3: perform the rsync
   logDebug "makeHourlySnapshot(): Performing rsync...";
-  logTrace "makeHourlySnapshot(): $RSYNC \
-      $RSYNC_OPTS \
-      /$SOURCE/ $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ >> $LOG_FILE 2>&1";
-  $RSYNC \
-      $RSYNC_OPTS \
-      /$SOURCE/ $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ >> $LOG_FILE 2>&1;
+  logTrace "makeHourlySnapshot(): \
+    $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ >> $LOG_FILE 2>&1";
+  $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ >>  $LOG_FILE 2>&1;
   if [ $? -ne 0 ] ; then
     logWarn "makeHourlySnapshot(): rsync encountered an error; continuing ...";
   fi;
   logDebug "makeHourlySnapshot(): rsync complete.";
 
-  # step 5: update the mtime of hourly.0 to reflect the snapshot time
+  # step 4: update the mtime of hourly.0 to reflect the snapshot time
   logTrace "makeHourlySnapshot(): $TOUCH $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/";
   $TOUCH $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ ;
   $TOUCH $SPARSE_IMAGE_MOUNT/hourly.0/;
 
-  # TODO implement cleanup for cases where rsync failed; 
-  # previous renames need to be undone
+  # TODO implement cleanup for cases where rsync failed
+  
+  # step 5: update the hourly timestamp with current time
   $TOUCH $HOURLY_LAST;
   $ECHO "`$DATE -u +%s`" > $HOURLY_LAST;
 
-  # and thats it for now.
   logInfo "makeHourlySnapshot(): Done.";
 }
 
-#------------------------------------------------------------------------------
-#------------- ORCHESTRATING FUNCTIONS ----------------------------------------
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
+#------------- ORCHESTRATING FUNCTIONS ---------------------------------
+#-----------------------------------------------------------------------
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # setup()
 #    Grouping of setup tasks (user check, sparse image creation, interval 
 #    checking, etc.)
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 setup() {
 
   logInfo "setup(): Beginning setup ...";
@@ -904,22 +904,29 @@ setup() {
   logInfo "setup(): Done.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # checkIntervals()
-#------------------------------------------------------------------------------
+#   Function which coordindates the various interval checking functions.
+#-----------------------------------------------------------------------
 checkIntervals() {
   checkWeeklyInterval;
   checkDailyInterval;
   checkHourlyInterval;
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # rotateSnapshots()
-#------------------------------------------------------------------------------
+#    Function responsible for overal orchestration of rotation functions 
+#    when when performing a backup. The order of operations is important 
+#    due to copies and renames which take place: 
+#      1) rotate hourlies; 
+#      2) rotate dailies;
+#      3) rotate weeklies;
+#-----------------------------------------------------------------------
 rotateSnapshots() {
   logInfo "rotateSnapshots(): Rotating snapshots...";
 
-  #---------- 1. INCREMENT HOURLIES --------------------------------------------
+  #---------- 1. INCREMENT HOURLIES ------------------------------------
   if [ $PERFORM_HOURLY_SNAPSHOT = yes ] ; then
     logInfo "rotateSnapshots(): Performing hourly snapshot creation...";
     rotateHourlySnapshot;
@@ -927,7 +934,7 @@ rotateSnapshots() {
     logInfo "rotateSnapshots(): Skipping hourly snapshot creation...";
   fi
 
-  #---------- 2. INCREMENT DAILIES ---------------------------------------------
+  #---------- 2. INCREMENT DAILIES -------------------------------------
   if [ $PERFORM_DAILY_ROTATE = yes ] ; then
     logInfo "rotateSnapshots(): Performing daily snapshot rotatation...";
     rotateDailySnapshot;
@@ -935,7 +942,7 @@ rotateSnapshots() {
     logInfo "rotateSnapshots(): Skipping daily snapshot rotatation...";
   fi
 
-  #---------- 3. INCREMENT WEEKLIES --------------------------------------------
+  #---------- 3. INCREMENT WEEKLIES ------------------------------------
   if [ $PERFORM_WEEKLY_ROTATE = yes ] ; then
     logInfo "rotateSnapshots(): Performing weekly snapshot rotatation...";
     rotateWeeklySnapshot;
@@ -946,9 +953,14 @@ rotateSnapshots() {
   logInfo "rotateSnapshots(): Snapshot rotation complete.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # pruneSnapshots()
-#------------------------------------------------------------------------------
+#    Function responsible for overal orchestration of other type-specific
+#    snapshots. The order of operations is important:
+#      1) prune weeklies; 
+#      2) prune dailies;
+#      3) prune hourlies;
+#-----------------------------------------------------------------------
 pruneSnapshots() {
   logInfo "pruneSnapshots(): Pruning old snapshots...";
 
@@ -961,10 +973,10 @@ pruneSnapshots() {
   logInfo "pruneSnapshots(): Prune complete.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # teardown()
 #    delete $LOCK_FILE and mount readonly
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 teardown() {
   logInfo "teardown(): Beginning teardown ...";
 
@@ -979,18 +991,18 @@ teardown() {
   logInfo "teardown(): Done.";
 }
 
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # main()
-#    Function responsible for overal orchestration of other functions when
-#    when performing a backup. The order of operations is important due to
-#    copies and renames which take place: 
-#      1) rotate weeklies; 
-#      2) rotate dailies;
-#      3) take hourly snapshot.
+#    Function responsible for overal orchestration of other functions 
+#    when when performing a backup. The order of operations is important 
+#    due to copies and renames which take place: 
+#      1) prune; 
+#      2) rotate;
+#      3) take hourly snapshots;
+#      4) prune;
 #    Note that each entry in the $INCLUDES is backed up in this order 
 #    serially (otherwise we'd create I/O contention).
-#    
-#------------------------------------------------------------------------------
+#-----------------------------------------------------------------------
 main() {
 
   logLog "Backup starting...";
