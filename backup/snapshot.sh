@@ -803,11 +803,15 @@ makeHourlySnapshot() {
   RSYNC_OPTS="--archive --sparse --partial --delete --delete-excluded \
       --exclude-from=$EXCLUDE_DIR/$EXCLUDE_FILE";
 
-  if [ $LOG_LEVEL -ge $LOG_DEBUG ]; then
+  if [ $LOG_INFO -ge $LOG_INFO ] ; then
+    RSYNC_OPTS="--stats $RSYNC_OPTS";
+  fi;
+
+  if [ $LOG_LEVEL -ge $LOG_DEBUG ] ; then
     RSYNC_OPTS="--verbose $RSYNC_OPTS";
   fi;
 
-  if [ $LOG_LEVEL -ge $LOG_TRACE ]; then
+  if [ $LOG_LEVEL -ge $LOG_TRACE ] ; then
     RSYNC_OPTS="--progress $RSYNC_OPTS";
   fi;
   
