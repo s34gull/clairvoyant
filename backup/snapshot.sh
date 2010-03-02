@@ -398,13 +398,14 @@ createSparseImage() {
   logInfo "createSparseImage(): Creating new sparse image file for snapshots...";
 
   logTrace "createSparseImage(): GUID=$HOSTNAME$RANDOM$DATE -u +%s";
-  GUID="`$HOSTNAME`$RANDOM`$DATE -u +%s`";
+  #GUID="`$HOSTNAME`$RANDOM`$DATE -u +%s`";
+  GUID="$RANDOM`$DATE -u +%s`";
 
-  logTrace "createSparseImage(): GUID=$ECHO $GUID | $HASH";
-  GUID=`$ECHO $GUID | $HASH`;
+  #logTrace "createSparseImage(): GUID=$ECHO $GUID | $HASH";
+  #GUID=`$ECHO $GUID | $HASH`;
 
-  logTrace "createSparseImage(): GUID=$ECHO $GUID | $CUT -d' ' -f1";
-  GUID=`$ECHO $GUID | $CUT -d' ' -f1`;
+  #logTrace "createSparseImage(): GUID=$ECHO $GUID | $CUT -d' ' -f1";
+  #GUID=`$ECHO $GUID | $CUT -d' ' -f1`;
 
   SPARSE_IMAGE_FILE=`$HOSTNAME`.$GUID;
   if [ $ENCRYPT = yes ] ; then

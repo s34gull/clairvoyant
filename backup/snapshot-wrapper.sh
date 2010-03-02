@@ -25,4 +25,9 @@
 # Free Software Foundation, Inc., 
 # 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 # ----------------------------------------------------------------------
-su - snapshot -c "/usr/local/bin/snapshot.sh &"
+
+unset PATH;
+
+IONICE=/usr/bin/ionice;
+
+`$IONICE -c2 -n7 /usr/local/sbin/snapshot.sh` 
