@@ -425,14 +425,14 @@ createSparseImage() {
   $ECHO "$SPARSE_IMAGE_FILE" > $SPARSE_IMAGE_STOR;
 
   logDebug "createSparseImage(): Attaching $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to loop...";
-  logTrace "createSparseImage(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
-  `$LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
+  logTrace "createSparseImage(): $LOSETUP -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
+  `$LOSETUP -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
-    logError "createSparseImage(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
+    logError "createSparseImage(): $LOSETUP -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
   fi;
 
-  logTrace "createSparseImage(): $LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1";
-  LOOP_DEV=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
+  logTrace "createSparseImage(): $LOSETUP -a | $GREP $SPARSE_IMAGE_FILE | $CUT -d':' -f1";
+  LOOP_DEV=`$LOSETUP -a | $GREP $SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
   logDebug "createSparseImage(): Attached $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to $LOOP_DEV";
   $ECHO "$LOOP_DEV" > $LOOP_DEV_STOR;
   MOUNT_DEV=$LOOP_DEV;
@@ -498,19 +498,19 @@ setupLoopDevice() {
     fi;
   fi;
   
-  logTrace "setupLoopDevice(): LOOP_EXISTS=$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $GREP $LOOP_DEV | $WC -c";
-  LOOP_EXISTS=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $GREP "$LOOP_DEV" | $WC -c`;
+  logTrace "setupLoopDevice(): LOOP_EXISTS=$LOSETUP -a | $GREP $SPARSE_IMAGE_FILE | $GREP $LOOP_DEV | $WC -c";
+  LOOP_EXISTS=`$LOSETUP -a | $GREP $SPARSE_IMAGE_FILE | $GREP "$LOOP_DEV" | $WC -c`;
 
   if [ $LOOP_EXISTS = 0 ] ; then
     logDebug "setupLoopDevice(): Attaching $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to loop...";
-    logTrace "setupLoopDevice(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
-    `$LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE`;
+    logTrace "setupLoopDevice(): $LOSETUP -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
+    `$LOSETUP -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE`;
     if [ $? -ne 0 ] ; then
-      logError "setupLoopDevice(): $LOSETUP --find $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
+      logError "setupLoopDevice(): $LOSETUP -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE call failed; check $LOSETUP -a for available loop devices; consider rebooting to reset loop devs.";
     fi;
 
-    logTrace "setupLoopDevice(): $LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1";
-    LOOP_DEV=`$LOSETUP -j $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
+    logTrace "setupLoopDevice(): $LOSETUP -a | $GREP $SPARSE_IMAGE_FILE | $CUT -d':' -f1";
+    LOOP_DEV=`$LOSETUP -a | $GREP $SPARSE_IMAGE_FILE | $CUT -d':' -f1`;
 
     logDebug "setupLoopDevice(): Attached $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to $LOOP_DEV";
     $ECHO "$LOOP_DEV" > $LOOP_DEV_STOR;
