@@ -58,7 +58,12 @@ TOUCH=/bin/touch;
 WC=/usr/bin/wc;
 
 # If we need encryption
-CRYPTSETUP=/sbin/cryptsetup
+CRYPTSETUP=/sbin/cryptsetup;
+
+#If we want to notify the user of our progress
+NOTIFY="/usr/bin/notify-send --urgency=normal --expire-time=2000 Snaphot";
+# set NOTIFY to $ECHO
+#NOTIFY=/bin/echo;
 
 # The syntax of kill can differ; either -n (Ubuntu) or -s (RHEL/Centos)
 # Make appropriate change here.
@@ -161,6 +166,7 @@ logLog() {
     if [ $LOG_LEVEL -ge $LOG_WARN ]; then
         echoConsole "LOG: $*";
         echo "`$DATE` [$$] LOG: $*" >> $LOG_FILE;
+        $NOTIFY "$*";
     fi;
 }
 
