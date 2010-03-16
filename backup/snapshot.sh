@@ -885,8 +885,7 @@ setup() {
   if [ $SPARSE_IMAGE_DIR -a $SPARSE_IMAGE_FILE -a -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE -a -s $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE ] ; then
     logDebug "setup(): Sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE exists.";
   else
-    logWarn "setup(): Sparse image file  $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE not found; creating new...";
-    createSparseImage;
+    logError "setup(): Sparse image file  $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE not found - verify contents of $SPARSE_IMAGE_STOR and remove that file if no longer valid; exiting.";
   fi;
 
   logInfo "setup(): Using sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
