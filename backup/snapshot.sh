@@ -655,6 +655,17 @@ pruneDailySnapshots() {
 #    Deletes the $SPARSE_IMAGE_MOUNT/hourly.$HOURLY_SNAP_LIMIT+1.
 #-----------------------------------------------------------------------
 pruneHourlySnapshots() {
+  # step #2.5: 
+  if [ -d $SPARSE_IMAGE_MOUNT/.hourly.tmp ]; then
+    logDebug "makeHourlySnapshot(): Removing stale instance .hourly.tmp ...";
+    logTrace "makeHourlySnapshot(): \
+      $RM -rf $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1";
+    $RM -rf $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1;
+    if [ $? -ne 0 ] ; then
+      logError "makeHourlySnapshot(): remove encountered an error; exiting.";
+    fi;
+  fi;
+
   # step 3: delete the oldest hourly snapshot, if it exists:
   if [ -d $SPARSE_IMAGE_MOUNT/hourly.$(($HOURLY_SNAP_LIMIT+1)) ] ; then
     logDebug "pruneHourlySnapshots(): Removing hourly.$(($HOURLY_SNAP_LIMIT+1))...";
@@ -677,7 +688,7 @@ rotateHourlySnapshot() {
   logInfo "rotateHourlySnapshot(): Beginning rotateHourlySnapshot ...";
 
   logDebug "rotateHourlySnapshot(): Incrementing hourlies...";
-  for (( i=$(($HOURLY_SNAP_LIMIT+1)) ; i>1 ; i-- ))
+  for (( i=$(($HOURLY_SNAP_LIMIT+1)) ; i>0 ; i-- ))
   do
     # step 1.1: shift the hourly snapshots(s) forward by one, if they exist
     OLD=$(($i-1));
@@ -691,16 +702,17 @@ rotateHourlySnapshot() {
   done
   logDebug "rotateHourlySnapshot(): Hourly increment complete.";
 
-  # step 1.2: make a hard-link-only (except for dirs) copy of the latest snapshot,
-  # if that exists
-  if [ -d $SPARSE_IMAGE_MOUNT/hourly.0 ] ; then
-    logDebug "rotateHourlySnapshot(): Copying hourly.0 to hourly.1 ...";
-    logTrace "rotateHourlySnapshot(): $CP -al $SPARSE_IMAGE_MOUNT/hourly.0 $SPARSE_IMAGE_MOUNT/hourly.1" >> $LOG_FILE 2>&1;
-    $CP -al $SPARSE_IMAGE_MOUNT/hourly.0 $SPARSE_IMAGE_MOUNT/hourly.1 >> $LOG_FILE 2>&1;
+  # step 1.2: rename the .hourly.tmp dir to hourly.0
+  if [ -d $SPARSE_IMAGE_MOUNT/.hourly.tmp ] ; then
+    logDebug "rotateHourlySnapshot(): Renaming .hourly.tmp to hourly.0 ...";
+    logTrace "rotateHourlySnapshot(): $MV $SPARSE_IMAGE_MOUNT/.hourly.tmp $SPARSE_IMAGE_MOUNT/hourly.0" >> $LOG_FILE 2>&1;
+    $MV $SPARSE_IMAGE_MOUNT/.hourly.tmp $SPARSE_IMAGE_MOUNT/hourly.0 >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
-      logFatal "rotateHourlySnapshot(): Unable to copy $SPARSE_IMAGE_MOUNT/hourly.0; exiting.";
+      logFatal "rotateHourlySnapshot(): Unable to rename $SPARSE_IMAGE_MOUNT/.hourly.tmp to $SPARSE_IMAGE_MOUNT/.hourly.0; exiting.";
     fi;
-    logDebug "rotateHourlySnapshot(): Copy complete.";
+    logDebug "rotateHourlySnapshot(): Rename complete.";
+  else
+    logError "rotateHourlySnapshot(): $SPARSE_IMAGE_MOUNT/.hourly.tmp is missing; exiting.";
   fi;
 
 
@@ -821,23 +833,41 @@ makeHourlySnapshot() {
   if [ $LOG_LEVEL -ge $LOG_TRACE ] ; then
     RSYNC_OPTS="--progress $RSYNC_OPTS";
   fi;
-  
+
+  # step #2.5: cp -al $SPARSE_IMAGE_MOUNT/hourly.0 to $SPARSE_IMAGE_MOUNT/hourly.tmp
+  if [ ! -d $SPARSE_IMAGE_MOUNT/.hourly.tmp ]; then
+    logDebug "makeHourlySnapshot(): $SPARSE_IMAGE_MOUNT/.hourly.tmp does not exist; creating ...";
+    logTrace "makeHourlySnapshot(): \ 
+      $MKDIR $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1;";
+    $MKDIR $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1;
+    if [ $? -ne 0 ] ; then
+      logError "makeHourlySnapshot(): Unable to create $SPARSE_IMAGE_MOUNT/.hourly.tmp; exiting.";
+    fi;
+  fi;
+
+  logDebug "makeHourlySnapshot(): Performing copy of hourly.0 to .hourly.tmp ...";
+  logTrace "makeHourlySnapshot(): \
+    $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1";
+  $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >>  $LOG_FILE 2>&1;
+  if [ $? -ne 0 ] ; then
+    logError "makeHourlySnapshot(): copy encountered an error; exiting.";
+  fi;
+  logDebug "makeHourlySnapshot(): copy complete.";
+
   # step #3: perform the rsync
   logDebug "makeHourlySnapshot(): Performing rsync...";
   logTrace "makeHourlySnapshot(): \
-    $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ >> $LOG_FILE 2>&1";
-  $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ >>  $LOG_FILE 2>&1;
+    $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/ >> $LOG_FILE 2>&1";
+  $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/ >>  $LOG_FILE 2>&1;
   if [ $? -ne 0 ] ; then
     logWarn "makeHourlySnapshot(): rsync encountered an error; continuing ...";
   fi;
   logDebug "makeHourlySnapshot(): rsync complete.";
 
   # step 4: update the mtime of hourly.0 to reflect the snapshot time
-  logTrace "makeHourlySnapshot(): $TOUCH $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/";
-  $TOUCH $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ ;
-  $TOUCH $SPARSE_IMAGE_MOUNT/hourly.0/;
-
-  # TODO implement cleanup for cases where rsync failed
+  logTrace "makeHourlySnapshot(): $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/";
+  $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/ ;
+  $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp/;
   
   # step 5: update the hourly timestamp with current time
   $TOUCH $HOURLY_LAST;
@@ -1021,8 +1051,6 @@ main() {
 
   pruneSnapshots;
 
-  rotateSnapshots;
-
   exec 3<&0;
   exec 0<"$INCLUDES";
   while read -r SOURCE;
@@ -1039,6 +1067,8 @@ main() {
     logInfo "main(): Completed snapshot of /$SOURCE.";
   done;
   exec 0<&3;
+
+  rotateSnapshots;
 
   pruneSnapshots;
 
