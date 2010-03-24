@@ -835,17 +835,17 @@ makeHourlySnapshot() {
   fi;
 
   # step #2.5: cp -al $SPARSE_IMAGE_MOUNT/hourly.0 to $SPARSE_IMAGE_MOUNT/hourly.tmp
-  if [ ! -d $SPARSE_IMAGE_MOUNT/.hourly.tmp ]; then
-    logDebug "makeHourlySnapshot(): $SPARSE_IMAGE_MOUNT/.hourly.tmp does not exist; creating ...";
+  if [ ! -d $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE ]; then
+    logDebug "makeHourlySnapshot(): $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE does not exist; creating ...";
     logTrace "makeHourlySnapshot(): \ 
-      $MKDIR $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1;";
-    $MKDIR $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1;
+      $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1;";
+    $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
-      logError "makeHourlySnapshot(): Unable to create $SPARSE_IMAGE_MOUNT/.hourly.tmp; exiting.";
+      logError "makeHourlySnapshot(): Unable to create $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE; exiting.";
     fi;
   fi;
 
-  logDebug "makeHourlySnapshot(): Performing copy of hourly.0 to .hourly.tmp ...";
+  logDebug "makeHourlySnapshot(): Performing copy of $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE to  $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE ...";
   logTrace "makeHourlySnapshot(): \
     $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1";
   $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >>  $LOG_FILE 2>&1;
