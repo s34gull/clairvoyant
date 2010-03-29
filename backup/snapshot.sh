@@ -847,8 +847,8 @@ makeHourlySnapshot() {
 
   logDebug "makeHourlySnapshot(): Performing copy of $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE to  $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE ...";
   logTrace "makeHourlySnapshot(): \
-    $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1";
-  $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >>  $LOG_FILE 2>&1;
+    $CP -alr $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1";
+  $CP -alr $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE $SPARSE_IMAGE_MOUNT/.hourly.tmp >>  $LOG_FILE 2>&1;
   if [ $? -ne 0 ] ; then
     logError "makeHourlySnapshot(): copy encountered an error; exiting.";
   fi;
