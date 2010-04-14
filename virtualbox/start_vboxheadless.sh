@@ -37,8 +37,7 @@ do
   RDP_STATE=`echo $SERVER | cut -d ' ' -f2`;
   RDP_PORT=`echo $SERVER | cut -d ' ' -f3`;
   echo "$PREFIX: $VMNAME $RDP_STATE $RDP_PORT";
-  STATE=$(VBoxManage showvminfo $VMNAME --machinereadable | grep 'VMState=' | cut -d '=' -f2);
-  STATE=`echo $STATE | sed "s/\"//g"`
+  STATE=$(VBoxManage showvminfo $VMNAME --machinereadable | grep 'VMState=' | cut -d '"' -f2);
   echo "$PREFIX: $VMNAME is currently $STATE";
   OPTS="--startvm $VMNAME";
   if [ $STATE != saved ] ; then
