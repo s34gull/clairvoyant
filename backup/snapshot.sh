@@ -87,8 +87,8 @@ CRYPT_DEV_STOR=$CONFIG_DIR/.crypt.dev;
 
 # Various lock and run files (may be tmpfs so aren't persistent)
 LOCK_DIR=/var/lock/snapshot;
-LOCK_FILE=$LOCK_DIR/pid.lock;
 FATAL_LOCK_FILE=$LOCK_DIR/fatal.lock;
+LOCK_FILE=/var/run/snapshot.pid;
 
 # Log file (may be tmpfs so aren't persistent)
 LOG_FILE=/var/log/snapshot.log;
