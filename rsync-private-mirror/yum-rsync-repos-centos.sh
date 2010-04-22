@@ -15,7 +15,7 @@ DETAIL_LOG=/var/log/yum-rsync-repos-centos.log
 
 echo "`date`: Centos repo mirror: Starting..." >> ${MESSAGE_LOG};
 
-mount -o remount,rw,noatime,nodiratime ${LOCAL_REPO_MOUNT}
+mount -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}
 if [ $? -ne 0 ]; then
   echo "`date`: Centos repo mirror: Remount rw ${LOCAL_REPO_MOUNT} failed; exiting..." >> ${MESSAGE_LOG};
   exit 1;
@@ -75,7 +75,7 @@ else
   fi;
 fi;
 
-mount -o remount,ro,noatime,nodiratime ${LOCAL_REPO_MOUNT}
+mount -o remount,ro,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}
 if [ $? -ne 0 ]; then
   echo "`date`: Centos repo mirror: Remount ro ${LOCAL_REPO_MOUNT} failed; exiting..." >> ${MESSAGE_LOG};
   exit 1;
