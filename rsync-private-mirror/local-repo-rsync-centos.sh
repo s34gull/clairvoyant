@@ -14,11 +14,11 @@ CENTOS_MIRROT_SITE=centos.mirrors.tds.net
 CENTOS_REPO_ROOT=${CENTOS_MIRROT_SITE}/CentOS
 
 MESSAGE_LOG=/var/log/messages
-DETAIL_LOG=/var/log/yum-rsync-repos-centos.log
+DETAIL_LOG=/var/log/local-repo-rsync-centos.log
 
-LOCK_DIR=/var/lock/repo.rsync.d;
+LOCK_DIR=/var/lock/local.repo.rsync.centos.d;
 FATAL_LOCK_FILE=$LOCK_DIR/fatal.lock;
-LOCK_FILE=/var/run/repo.rsync.pid;
+LOCK_FILE=/var/run/local.repo.rsync.centos.pid;
 
 # LOGGING levels
 LOG_TRACE=5;
@@ -27,7 +27,17 @@ LOG_INFO=3;
 LOG_WARN=2;
 LOG_ERROR=1;
 LOG_FATAL=0;
+
 SILENT=no;
+
+# The syntax of kill can differ; either -n (Ubuntu) or -s (RHEL/Centos)
+# Make appropriate change here.
+TEST_PROCESS="kill -n 0";
+
+#If we want to notify the user of our progress
+#NOTIFY="/usr/bin/notify-send --urgency=normal --expire-time=2000 Snaphot";
+# set NOTIFY to $ECHO
+NOTIFY=/bin/echo;
 
 #-----------------------------------------------------------------------
 # Logging functions; all output is echo'd to console and/or appended to
@@ -42,7 +52,8 @@ echoConsole() {
 logLog() {
     if [ $LOG_LEVEL -ge $LOG_WARN ]; then
         echoConsole "LOG: $*";
-        echo "`$DATE` [$$] LOG: $*" >> $MESSAGE_LOG;
+        echo "`date` {$0} [$$] LOG: $*" >> $MESSAGE_LOG;
+        echo "`date` [$$] LOG: $*" >> $DETAIL_LOG;
         $NOTIFY "$*";
     fi;
 }
@@ -50,43 +61,48 @@ logLog() {
 logTrace() {
     if [ $LOG_LEVEL -ge $LOG_TRACE ]; then
         echoConsole "TRACE: $*";
-        echo "`$DATE` [$$] TRACE: $*" >> $LOG_FILE;
+        echo "`date` [$$] TRACE: $*" >> $DETAIL_LOG;
     fi;
 }
 
 logDebug() {
     if [ $LOG_LEVEL -ge $LOG_DEBUG ]; then
         echoConsole "DEBUG: $*";
-        echo "`$DATE` [$$] DEBUG: $*" >> $LOG_FILE;
+        echo "`date` [$$] DEBUG: $*" >> $DETAIL_LOG;
     fi;
 }
 
 logInfo() {
     if [ $LOG_LEVEL -ge $LOG_INFO ]; then
         echoConsole "INFO: $*";
-        echo "`$DATE` [$$] INFO: $*" >> $LOG_FILE;
+        echo "`date` [$$] INFO: $*" >> $DETAIL_LOG;
     fi;
 }
 
 logWarn() {
     if [ $LOG_LEVEL -ge $LOG_WARN ]; then
         echo "WARNING: $*";
-        echo "`$DATE` [$$] WARNING: $*" >> $MESSAGE_LOG;
+        echo "`date` {$0} [$$] WARNING: $*" >> $MESSAGE_LOG;
+        echo "`date` [$$] WARNING: $*" >> $DETAIL_LOG;
     fi;
 }
 
 logError() {
     if [ $LOG_LEVEL -ge $LOG_ERROR ]; then
         echo "ERROR:  $*";
-        echo "`$DATE` [$$] ERROR: $*" >> $MESSAGE_LOG;
+        echo "`date` {$0} [$$] ERROR: $*" >> $MESSAGE_LOG;
+        echo "`date` [$$] ERROR: $*" >> $DETAIL_LOG;
     fi;
+    teardown;
     exit 1;
 }
 
 logFatal() {
     echo "FATAL: $*";
-    echo "`$DATE` [$$] FATAL: $*" >> $MESSAGE_LOG;
-    $TOUCH $FATAL_LOCK_FILE;
+    echo "`date` {$0} [$$] FATAL: $*" >> $MESSAGE_LOG;
+    echo "`date` [$$] FATAL: $*" >> $DETAIL_LOG;
+    touch $FATAL_LOCK_FILE;
+    teardown;
     exit 2;
 }
 
@@ -97,15 +113,15 @@ logFatal() {
 #    simultaneously.
 #-----------------------------------------------------------------------
 getLock() {
-  logInfo "getLock(): Beginning getLock...";
+  logInfo "getLock(): Starting...";
   if [ ! -d $LOCK_DIR ] ; then
       logDebug "getLock(): Lockfile directory doesn't exist; creating $LOCK_DIR";
-      logTrace "getLock(): $MKDIR -p $LOCK_DIR >> $LOG_FILE 2>&1";
-      $MKDIR -p $LOCK_DIR >> $LOG_FILE 2>&1;
+      logTrace "getLock(): mkdir -p $LOCK_DIR >> $MESSAGE_LOG 2>&1";
+      mkdir -p $LOCK_DIR >> $MESSAGE_LOG 2>&1;
   fi;
 
   if [ $FATAL_LOCK_FILE -a -f $FATAL_LOCK_FILE ] ; then
-    logFatal "A previously fatal error was detected. I will not execute until you review the $LOG_FILE and address any issues reported there; failure to do so may result in corruption of your snapshots. Once you have done so, remove $FATAL_LOCK_FILE and re-run me."; 
+    logFatal "A previously fatal error was detected. I will not execute until you review the $MESSAGE_LOG and address any issues reported there; failure to do so may result in corruption of your snapshots. Once you have done so, remove $FATAL_LOCK_FILE and re-run me."; 
   fi;
 
   if [ $LOCK_FILE -a -f $LOCK_FILE -a -s $LOCK_FILE ] ; then
@@ -121,16 +137,16 @@ getLock() {
             logError "getLock():Found running instance with PID=$PID; exiting.";
         else
             logDebug "getLock():Process $PID not found; deleting stale lockfile $LOCK_FILE";
-            logTrace "getLock(): $RM $LOCK_FILE >> $LOG_FILE 2>&1";
-            $RM $LOCK_FILE >> $LOG_FILE 2>&1;
+            logTrace "getLock(): rm $LOCK_FILE >> $MESSAGE_LOG 2>&1";
+            rm $LOCK_FILE >> $MESSAGE_LOG 2>&1;
         fi;
         break;
       done;
       exec 0<&3;
   else
     logDebug "getLock(): Specified lockfile $LOCK_FILE not found; creating...";
-    logTrace "getLock(): $TOUCH $LOCK_FILE >> $LOG_FILE 2>&1";
-    $TOUCH $LOCK_FILE >> $LOG_FILE 2>&1;
+    logTrace "getLock(): touch $LOCK_FILE >> $MESSAGE_LOG 2>&1";
+    touch $LOCK_FILE >> $MESSAGE_LOG 2>&1;
   fi;
 
   logInfo "getLock(): Recording current PID $$ in lockfile $LOCK_FILE";
@@ -140,27 +156,80 @@ getLock() {
   logInfo "getLock(): Done.";
 }
 
-echo "`date`: Centos repo mirror: Starting..." >> ${MESSAGE_LOG};
-
 #
 # Remount LOCAL_REPO_MOUNT as read-write for update
 #
-mount -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}
-if [ $? -ne 0 ]; then
-  echo "`date`: Centos repo mirror: Remount rw ${LOCAL_REPO_MOUNT} failed; exiting..." >> ${MESSAGE_LOG};
-  exit 1;
-fi;
+mountReadWrite() {
+  logInfo "mountReadWrite(): Starting...";
+
+  logTrace "mountReadWrite(): Will execute: mount -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}";
+
+  mount -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT};
+
+  if [ $? -ne 0 ]; then
+    logError "mountReadWrite() Remount rw ${LOCAL_REPO_MOUNT} failed; exiting...";
+  fi;
+  logInfo "mountReadWrite(): Done.";
+}
+
+#
+# Remount the LOCAL_REPO_MOUNT as read-only
+#
+mountReadOnly() {
+  logInfo "mountReadOnly(): Starting...";
+
+  logTrace "mountReadOnly(): Will execute: mount -o remount,ro,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}";
+
+  mount -o remount,ro,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT};
+
+  if [ $? -ne 0 ]; then
+    logError "mountReadOnly(): Remount ro ${LOCAL_REPO_MOUNT} failed; exiting...";
+  fi;
+  logInfo "mountReadOnly(): Done.";
+}
 
 #
 # Create a working copy of the current local repository using hard links
 # to minimize space and preserving modification times so that rsync
 # will handle diffs properly. All work takes place in the working copy.
-# 
-cp -al ${LOCAL_CENTOS_REPO} ${LOCAL_CENTOS_REPO_WORKING};
-if [ $? -ne 0 ]; then
-  echo "`date`: Centos repo mirror: cp -al failed; exiting..." >> ${MESSAGE_LOG};
-  exit 1;
-fi;
+#
+createWorkingCopy() { 
+  logInfo "createWorkingCopy(): Starting...";
+
+  logTrace "createWorkingCopy(): Will execute: cp -al ${LOCAL_CENTOS_REPO} ${LOCAL_CENTOS_REPO_WORKING}";
+
+  cp -al ${LOCAL_CENTOS_REPO} ${LOCAL_CENTOS_REPO_WORKING};
+
+  if [ $? -ne 0 ]; then
+    logError "createWorkingCopy(): cp -al failed; exiting...";
+  fi;
+  logInfo "createWorkingCopy(): Done.";
+}
+
+#
+# Replace the stale CentOS repo with the now vetted working copy.
+#
+promoteWorkingCopy() {
+  logInfo "promoteWorkingCopy(): Starting...";
+
+  logTrace "promoteWorkingCopy(): Will execute: rm -rf ${LOCAL_CENTOS_REPO}";
+
+  rm -rf ${LOCAL_CENTOS_REPO};
+
+  if [ $? -ne 0 ]; then
+    logError "promoteWorkingCopy(): rm -rf failed; exiting...";
+    exit 1;
+  else 
+    logTrace "promoteWorkingCopy(): Will execute: mv ${LOCAL_CENTOS_REPO_WORKING} ${LOCAL_CENTOS_REPO}";
+
+    mv ${LOCAL_CENTOS_REPO_WORKING} ${LOCAL_CENTOS_REPO};
+
+    if [ $? -ne 0 ]; then
+      logError "promoteWorkingCopy(): mv failed; exiting...";
+    fi;
+  fi;
+  logInfo "promoteWorkingCopy(): Done.";
+}
 
 #
 # Loop over CentOS 4 and 5 for i386 and x86_64, performing and rsync against
@@ -168,68 +237,123 @@ fi;
 # CENTOS_MIRROT_SITE. Failures for an individual file will not stop the sync;
 # Failures for an individual REPO will not stop the sync.
 #
-for RELEASE_VER in "4" "5"; 
-do
-  for BASE_ARCH in "i386" "x86_64";
+synchronizeLocalRepos() {
+  logInfo "synchronizeLocalRepos(): Starting...";
+  
+  RSYNC_OPTS="--archive --partial --sparse --delete --exclude=debug/";
+
+  if [ $LOG_LEVEL -ge $LOG_INFO ] ; then
+    RSYNC_OPTS="--stats $RSYNC_OPTS";
+  fi;
+
+  if [ $LOG_LEVEL -ge $LOG_DEBUG ] ; then
+    RSYNC_OPTS="--verbose $RSYNC_OPTS";
+  fi;
+
+  if [ $LOG_LEVEL -ge $LOG_TRACE ] ; then
+    RSYNC_OPTS="--progress $RSYNC_OPTS";
+  fi;
+
+  for RELEASE_VER in "4" "5"; 
   do
-    if [[ ${RELEASE_VER} == "4" ]] && [[ ${BASE_ARCH} == "i386" ]] ; then
-      echo "`date`: Centos repo mirror: Skipping CentOS ${RELEASE_VER} for ${BASE_ARCH} ..." >> ${DETAIL_LOG};
-      continue;
-    fi
-    for REPO in addons centosplus contrib extras updates;
+    for BASE_ARCH in "i386" "x86_64";
     do
-      echo "`date`: rsync --archive --verbose --partial --sparse --delete  rsync://${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH} \
-      --exclude=debug/ ${LOCAL_CENTOS_REPO_WORKING}/${RELEASE_VER}/${REPO}/" >> ${DETAIL_LOG};
+      if [[ ${RELEASE_VER} == "4" ]] && [[ ${BASE_ARCH} == "i386" ]] ; then
+        logInfo "synchronizeLocalRepos(): Skipping CentOS ${RELEASE_VER} for ${BASE_ARCH} ...";
+        continue;
+      fi
+      for REPO in addons centosplus contrib extras updates;
+      do
+        logInfo "synchronizeLocalRepos(): Syncing ${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH}";
 
-      sudo su reposync -c "rsync --archive --verbose --partial --sparse --delete  rsync://${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH} \
-      --exclude=debug/ ${LOCAL_CENTOS_REPO_WORKING}/${RELEASE_VER}/${REPO}/" >> ${DETAIL_LOG} 2>&1;
+        logTrace "synchronizeLocalRepos(): Will execute: sudo su reposync -c \"rsync ${RSYNC_OPTS}  rsync://${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH} \
+        ${LOCAL_CENTOS_REPO_WORKING}/${RELEASE_VER}/${REPO}/\"";
 
-      if [ $? -ne 0 ]; then
-        echo "`date`: Centos repo mirror: [${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH}] rsync failed; continuing..." >> ${MESSAGE_LOG};
-      fi; 
+        sudo su reposync -c "rsync ${RSYNC_OPTS} rsync://${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH} \
+        ${LOCAL_CENTOS_REPO_WORKING}/${RELEASE_VER}/${REPO}/" >> ${DETAIL_LOG} 2>&1;
+
+        if [ $? -ne 0 ]; then
+          logWarn "synchronizeLocalRepos(): [${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH}] rsync failed; continuing...";
+        fi; 
+      done;
     done;
   done;
-done;
+  logInfo "synchronizeLocalRepos(): Done.";
+}
 
 #
-# Kickoff a virus scan of the newly downloaded files. Infected files will be deleted.
+# Perform virus scan of the newly downloaded files. Infected files will be deleted.
 #
-clamdscan --fdpass --multiscan --remove ${LOCAL_CENTOS_REPO_WORKING} >> ${DETAIL_LOG} 2>&1;
-if [ $? -eq 1 ]; then
-  echo "`date`: Centos repo mirror: clamscan detected and removed infected files; contiuing..." >> ${MESSAGE_LOG};
-else 
-  if [ $? -eq 2 ]; then
-    echo "`date`: Centos repo mirror: clamscan encountered an error; exiting..." >> ${MESSAGE_LOG};
-    exit 1;
-  fi;
-fi; 
+scanForVirii() {
+  logInfo "scanForVirii(): Starting...";
+
+  logTrace "scanForVirii(): Will execute: clamdscan --fdpass --multiscan --remove ${LOCAL_CENTOS_REPO_WORKING}";
+
+  clamdscan --fdpass --multiscan --remove ${LOCAL_CENTOS_REPO_WORKING} >> ${DETAIL_LOG} 2>&1;
+
+  if [ $? -eq 1 ]; then
+    logWarn "scanForVirii(): clamscan detected and removed infected files; contiuing...";
+  else 
+    if [ $? -eq 2 ]; then
+      logError "scanForVirii(): clamscan encountered an error; exiting...";
+    fi;
+  fi; 
+  logInfo "scanForVirii(): Done.";
+}
 
 #
-# Replace the stale CentOS repo with the now vetted working copy.
 #
-rm -rf ${LOCAL_CENTOS_REPO};
-if [ $? -ne 0 ]; then
-  echo "`date`: Centos repo mirror: rm -rf failed; exiting..." >> ${MESSAGE_LOG};
-  exit 1;
-else 
-  mv ${LOCAL_CENTOS_REPO_WORKING} ${LOCAL_CENTOS_REPO};
-  if [ $? -ne 0 ]; then
-    echo "`date`: Centos repo mirror: mv failed; exiting..." >> ${MESSAGE_LOG};
-    exit 1;
-  fi;
-fi;
+#
+startup() {
+  logInfo "startup(): Starting...";
+
+  getLock;
+
+  mountReadWrite;
+
+  logInfo "startup(): Done.";
+}
 
 #
-# Remount the LOCAL_REPO_MOUNT as read-only
 #
-mount -o remount,ro,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}
-if [ $? -ne 0 ]; then
-  echo "`date`: Centos repo mirror: Remount ro ${LOCAL_REPO_MOUNT} failed; exiting..." >> ${MESSAGE_LOG};
-  exit 1;
-fi;
+#
+teardown() {
+  logInfo "teardown(): Starting...";
+
+  mountReadOnly;
+
+  logInfo "teardown(): Removing $LOCK_FILE...";
+  rm $LOCK_FILE;
+
+  logInfo "teardown(): Done.";
+}
 
 #
-# We're outta here!
-# 
-echo "`date`: Centos repo mirror: Complete." >> ${MESSAGE_LOG};
-exit 0;
+# main coordinates all of the other functions
+#
+main() {
+  LOG_LEVEL=${LOG_WARN};
+
+  logLog "main(): Starting...";
+
+  startup;
+
+  createWorkingCopy;
+
+  synchronizeLocalRepos;
+
+  scanForVirii;
+
+  promoteWorkingCopy;
+
+  teardown;
+
+  logLog "main(): Complete.";
+
+  exit 0;
+}
+
+#
+# Invoke main
+#
+main;
