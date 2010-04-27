@@ -351,7 +351,7 @@ teardown() {
 # main coordinates all of the other functions
 #
 main() {
-  LOG_LEVEL=${LOG_DEBUG};
+  LOG_LEVEL=${LOG_WARN};
 
   logLog "main(): Starting...";
 
