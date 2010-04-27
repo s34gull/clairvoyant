@@ -39,9 +39,9 @@ CENTOS_REPO_ROOT=${CENTOS_MIRROT_SITE}/CentOS
 MESSAGE_LOG=/var/log/messages
 DETAIL_LOG=/var/log/local-repo-rsync-centos.log
 
-LOCK_DIR=/var/lock/local.repo.rsync.centos.d;
+LOCK_DIR=/var/lock/local-repo-rsync-centos.d;
 FATAL_LOCK_FILE=$LOCK_DIR/fatal.lock;
-LOCK_FILE=/var/run/local.repo.rsync.centos.pid;
+LOCK_FILE=/var/run/local-repo-rsync-centos.pid;
 
 # LOGGING levels
 LOG_TRACE=5;
