@@ -43,13 +43,13 @@ GREP=/bin/grep;
 HASH=/usr/bin/md5sum;
 HOSTNAME=/bin/hostname;
 ID=/usr/bin/id;
-KILL=/bin/kill;
 LOSETUP=/sbin/losetup;
 LPWD=/bin/pwd;
 MKDIR=/bin/mkdir;
 MKFS=/sbin/mkfs;
 MOUNT=/bin/mount;
 MV=/bin/mv;
+PS=/bin/ps;
 RM=/bin/rm;
 RSYNC=/usr/bin/rsync;
 SED=/bin/sed;
@@ -65,9 +65,7 @@ NOTIFY="/usr/bin/notify-send --urgency=normal --expire-time=2000 Snaphot";
 # set NOTIFY to $ECHO
 #NOTIFY=/bin/echo;
 
-# The syntax of kill can differ; either -n (Ubuntu) or -s (RHEL/Centos)
-# Make appropriate change here.
-TEST_PROCESS="$KILL -n 0";
+TEST_PROCESS="$PS -p";
 
 # ----------------------------------------------------------------------
 # ------------- GLOBAL VARIABLES ---------------------------------------
@@ -284,24 +282,17 @@ getLock() {
   fi;
 
   if [ $LOCK_FILE -a -f $LOCK_FILE -a -s $LOCK_FILE ] ; then
-      exec 3<&0;
-      exec 0<"$LOCK_FILE";
-      while read -r PID
-      do 
-        logDebug "getLock():Checking for running instance of script with PID $PID";
-        logTrace "getLock(): $TEST_PROCESS $PID > /dev/null 2>&1";
-        $TEST_PROCESS $PID > /dev/null 2>&1;
-        if [ $? = 0 ] ; then
-            # check name as well
-            logError "getLock():Found running instance with PID=$PID; exiting.";
-        else
-            logDebug "getLock():Process $PID not found; deleting stale lockfile $LOCK_FILE";
-            logTrace "getLock(): $RM $LOCK_FILE >> $LOG_FILE 2>&1";
-            $RM $LOCK_FILE >> $LOG_FILE 2>&1;
-        fi;
-        break;
-      done;
-      exec 0<&3;
+      PID=`$CAT ${LOCK_FILE}`;
+      logDebug "getLock():Checking for running instance of script with PID $PID";
+      logTrace "getLock(): $TEST_PROCESS ${PID} > /dev/null 2>&1";
+      if $TEST_PROCESS ${PID} > /dev/null 2>&1; then
+          # check name as well
+          logError "getLock():Found running instance with PID=$PID; exiting.";
+      else
+          logDebug "getLock():Process $PID not found; deleting stale lockfile $LOCK_FILE";
+          logTrace "getLock(): $RM $LOCK_FILE >> $LOG_FILE 2>&1";
+          $RM $LOCK_FILE >> $LOG_FILE 2>&1;
+      fi;
   else
     logDebug "getLock(): Specified lockfile $LOCK_FILE not found; creating...";
     logTrace "getLock(): $TOUCH $LOCK_FILE >> $LOG_FILE 2>&1";
