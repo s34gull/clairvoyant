@@ -4,14 +4,15 @@ unset PATH
 # -------------COMMANDS------------------------------------------------
 # Include external commands here for portability
 
+CAT=/bin/cat;
 CP=/bin/cp;
 DATE=/bin/date;
 ECHO=/bin/echo;
 GREP=/bin/grep;
-KILL=/bin/kill;
 MKDIR=/bin/mkdir;
 MOUNT=/bin/mount;
 MV=/bin/mv;
+PS=/bin/ps;
 RM=/bin/rm;
 RSYNC=/usr/bin/rsync;
 SU=/bin/su;
@@ -55,7 +56,7 @@ SILENT=no;
 
 # The syntax of kill can differ; either -n (Ubuntu) or -s (RHEL/Centos)
 # Make appropriate change here.
-TEST_PROCESS="$KILL -n 0";
+TEST_PROCESS="$PS -p";
 
 #If we want to notify the user of our progress
 #NOTIFY="/usr/bin/notify-send --urgency=normal --expire-time=2000 Snaphot";
@@ -148,24 +149,17 @@ getLock() {
   fi;
 
   if [ $LOCK_FILE -a -f $LOCK_FILE -a -s $LOCK_FILE ] ; then
-      exec 3<&0;
-      exec 0<"$LOCK_FILE";
-      while read -r PID
-      do 
-        logDebug "getLock():Checking for running instance of script with PID $PID";
-        logTrace "getLock(): $TEST_PROCESS $PID > /dev/null 2>&1";
-        $TEST_PROCESS $PID > /dev/null 2>&1;
-        if [ $? = 0 ] ; then
-            # check name as well
-            logError "getLock():Found running instance with PID=$PID; exiting.";
-        else
-            logDebug "getLock():Process $PID not found; deleting stale lockfile $LOCK_FILE";
-            logTrace "getLock(): $RM $LOCK_FILE >> $MESSAGE_LOG 2>&1";
-            $RM $LOCK_FILE >> $MESSAGE_LOG 2>&1;
-        fi;
-        break;
-      done;
-      exec 0<&3;
+    PID=`$CAT ${LOCK_FILE}`;
+    logDebug "getLock():Checking for running instance of script with PID ${PID}";
+    logTrace "getLock(): $TEST_PROCESS ${PID} > /dev/null 2>&1";
+    if $TEST_PROCESS ${PID} > /dev/null 2>&1; then
+        # check name as well
+        logError "getLock():Found running instance with PID=$PID; exiting.";
+    else
+        logDebug "getLock():Process $PID not found; deleting stale lockfile $LOCK_FILE";
+        logTrace "getLock(): $RM $LOCK_FILE >> $MESSAGE_LOG 2>&1";
+        $RM $LOCK_FILE >> $MESSAGE_LOG 2>&1;
+    fi;
   else
     logDebug "getLock(): Specified lockfile $LOCK_FILE not found; creating...";
     logTrace "getLock(): $TOUCH $LOCK_FILE >> $MESSAGE_LOG 2>&1";
@@ -357,7 +351,7 @@ teardown() {
 # main coordinates all of the other functions
 #
 main() {
-  LOG_LEVEL=${LOG_WARN};
+  LOG_LEVEL=${LOG_DEBUG};
 
   logLog "main(): Starting...";
 
