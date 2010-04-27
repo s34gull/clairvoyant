@@ -1,14 +1,9 @@
 /var/log/snapshot.log {
         weekly
         missingok
-	copytruncate
-        rotate 12
+        copytruncate
+        rotate 6
         compress
         notifempty
         sharedscripts
-        postrotate
-           if [ -f /var/run/snapshot.pid ] && ps --pid $(cat /var/run/snapshot.pid) > /dev/null 2>&1; then \
-             touch /var/log/snapshot.log
-           fi;
-        endscript
 }
