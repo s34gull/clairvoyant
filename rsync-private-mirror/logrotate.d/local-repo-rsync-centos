@@ -1,14 +1,9 @@
 /var/log/local-repo-rsync-centos.log {
         weekly
         missingok
-	copytruncate
-        rotate 12
+        copytruncate
+        rotate 6
         compress
         notifempty
         sharedscripts
-        postrotate
-           if [ -f /var/run/local-repo-rsync-centos.pid ] && ps --pid $(cat /var/run/local-repo-rsync-centos.pid) > /dev/null 2>&1; then \
-             touch /var/log/local-repo-rsync-centos.log
-           fi;
-        endscript
 }
