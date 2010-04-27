@@ -1,10 +1,33 @@
 #!/bin/bash
+unset PATH
+
+# -------------COMMANDS------------------------------------------------
+# Include external commands here for portability
+
+CP=/bin/cp;
+DATE=/bin/date;
+ECHO=/bin/echo;
+GREP=/bin/grep;
+KILL=/bin/kill;
+MKDIR=/bin/mkdir;
+MOUNT=/bin/mount;
+MV=/bin/mv;
+RM=/bin/rm;
+RSYNC=/usr/bin/rsync;
+SU=/bin/su;
+SUDO=/usr/bin/sudo;
+TOUCH=/bin/touch;
+CLAMDSCAN=/usr/bin/clamdscan
+# ---------------------------------------------------------------------
+
 
 #
 # The following actions apply to the following repositories:
 # CentOS 4 x86_64 (skip i386);
 # CentOS 5 i386 and x86_64
 # 
+
+RSYNC_USER=reposync;
 
 LOCAL_REPO_MOUNT=/var/www/repos
 LOCAL_CENTOS_REPO=${LOCAL_REPO_MOUNT}/centos
@@ -32,12 +55,12 @@ SILENT=no;
 
 # The syntax of kill can differ; either -n (Ubuntu) or -s (RHEL/Centos)
 # Make appropriate change here.
-TEST_PROCESS="kill -n 0";
+TEST_PROCESS="$KILL -n 0";
 
 #If we want to notify the user of our progress
 #NOTIFY="/usr/bin/notify-send --urgency=normal --expire-time=2000 Snaphot";
 # set NOTIFY to $ECHO
-NOTIFY=/bin/echo;
+NOTIFY=$ECHO;
 
 #-----------------------------------------------------------------------
 # Logging functions; all output is echo'd to console and/or appended to
@@ -45,15 +68,15 @@ NOTIFY=/bin/echo;
 #-----------------------------------------------------------------------
 echoConsole() {
     if [ $SILENT = no ]; then
-        echo $1;
+        $ECHO $1;
     fi;
 }
 
 logLog() {
     if [ $LOG_LEVEL -ge $LOG_WARN ]; then
         echoConsole "LOG: $*";
-        echo "`date` {$0} [$$] LOG: $*" >> $MESSAGE_LOG;
-        echo "`date` [$$] LOG: $*" >> $DETAIL_LOG;
+        $ECHO "`$DATE` {$0} [$$] LOG: $*" >> $MESSAGE_LOG;
+        $ECHO "`$DATE` [$$] LOG: $*" >> $DETAIL_LOG;
         $NOTIFY "$*";
     fi;
 }
@@ -61,47 +84,47 @@ logLog() {
 logTrace() {
     if [ $LOG_LEVEL -ge $LOG_TRACE ]; then
         echoConsole "TRACE: $*";
-        echo "`date` [$$] TRACE: $*" >> $DETAIL_LOG;
+        $ECHO "`$DATE` [$$] TRACE: $*" >> $DETAIL_LOG;
     fi;
 }
 
 logDebug() {
     if [ $LOG_LEVEL -ge $LOG_DEBUG ]; then
         echoConsole "DEBUG: $*";
-        echo "`date` [$$] DEBUG: $*" >> $DETAIL_LOG;
+        $ECHO "`$DATE` [$$] DEBUG: $*" >> $DETAIL_LOG;
     fi;
 }
 
 logInfo() {
     if [ $LOG_LEVEL -ge $LOG_INFO ]; then
         echoConsole "INFO: $*";
-        echo "`date` [$$] INFO: $*" >> $DETAIL_LOG;
+        $ECHO "`$DATE` [$$] INFO: $*" >> $DETAIL_LOG;
     fi;
 }
 
 logWarn() {
     if [ $LOG_LEVEL -ge $LOG_WARN ]; then
-        echo "WARNING: $*";
-        echo "`date` {$0} [$$] WARNING: $*" >> $MESSAGE_LOG;
-        echo "`date` [$$] WARNING: $*" >> $DETAIL_LOG;
+        $ECHO "WARNING: $*";
+        $ECHO "`$DATE` {$0} [$$] WARNING: $*" >> $MESSAGE_LOG;
+        $ECHO "`$DATE` [$$] WARNING: $*" >> $DETAIL_LOG;
     fi;
 }
 
 logError() {
     if [ $LOG_LEVEL -ge $LOG_ERROR ]; then
-        echo "ERROR:  $*";
-        echo "`date` {$0} [$$] ERROR: $*" >> $MESSAGE_LOG;
-        echo "`date` [$$] ERROR: $*" >> $DETAIL_LOG;
+        $ECHO "ERROR:  $*";
+        $ECHO "`$DATE` {$0} [$$] ERROR: $*" >> $MESSAGE_LOG;
+        $ECHO "`$DATE` [$$] ERROR: $*" >> $DETAIL_LOG;
     fi;
     teardown;
     exit 1;
 }
 
 logFatal() {
-    echo "FATAL: $*";
-    echo "`date` {$0} [$$] FATAL: $*" >> $MESSAGE_LOG;
-    echo "`date` [$$] FATAL: $*" >> $DETAIL_LOG;
-    touch $FATAL_LOCK_FILE;
+    $ECHO "FATAL: $*";
+    $ECHO "`$DATE` {$0} [$$] FATAL: $*" >> $MESSAGE_LOG;
+    $ECHO "`$DATE` [$$] FATAL: $*" >> $DETAIL_LOG;
+    $TOUCH $FATAL_LOCK_FILE;
     teardown;
     exit 2;
 }
@@ -116,8 +139,8 @@ getLock() {
   logInfo "getLock(): Starting...";
   if [ ! -d $LOCK_DIR ] ; then
       logDebug "getLock(): Lockfile directory doesn't exist; creating $LOCK_DIR";
-      logTrace "getLock(): mkdir -p $LOCK_DIR >> $MESSAGE_LOG 2>&1";
-      mkdir -p $LOCK_DIR >> $MESSAGE_LOG 2>&1;
+      logTrace "getLock(): $MKDIR -p $LOCK_DIR >> $MESSAGE_LOG 2>&1";
+      $MKDIR -p $LOCK_DIR >> $MESSAGE_LOG 2>&1;
   fi;
 
   if [ $FATAL_LOCK_FILE -a -f $FATAL_LOCK_FILE ] ; then
@@ -137,21 +160,21 @@ getLock() {
             logError "getLock():Found running instance with PID=$PID; exiting.";
         else
             logDebug "getLock():Process $PID not found; deleting stale lockfile $LOCK_FILE";
-            logTrace "getLock(): rm $LOCK_FILE >> $MESSAGE_LOG 2>&1";
-            rm $LOCK_FILE >> $MESSAGE_LOG 2>&1;
+            logTrace "getLock(): $RM $LOCK_FILE >> $MESSAGE_LOG 2>&1";
+            $RM $LOCK_FILE >> $MESSAGE_LOG 2>&1;
         fi;
         break;
       done;
       exec 0<&3;
   else
     logDebug "getLock(): Specified lockfile $LOCK_FILE not found; creating...";
-    logTrace "getLock(): touch $LOCK_FILE >> $MESSAGE_LOG 2>&1";
-    touch $LOCK_FILE >> $MESSAGE_LOG 2>&1;
+    logTrace "getLock(): $TOUCH $LOCK_FILE >> $MESSAGE_LOG 2>&1";
+    $TOUCH $LOCK_FILE >> $MESSAGE_LOG 2>&1;
   fi;
 
   logInfo "getLock(): Recording current PID $$ in lockfile $LOCK_FILE";
-  logTrace "getLock(): echo $$ > $LOCK_FILE";
-  echo $$ > $LOCK_FILE;
+  logTrace "getLock(): $ECHO $$ > $LOCK_FILE";
+  $ECHO $$ > $LOCK_FILE;
 
   logInfo "getLock(): Done.";
 }
@@ -162,9 +185,9 @@ getLock() {
 mountReadWrite() {
   logInfo "mountReadWrite(): Starting...";
 
-  logTrace "mountReadWrite(): Will execute: mount -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}";
+  logTrace "mountReadWrite(): Will execute: $MOUNT -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}";
 
-  mount -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT};
+  $MOUNT -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT};
 
   if [ $? -ne 0 ]; then
     logError "mountReadWrite() Remount rw ${LOCAL_REPO_MOUNT} failed; exiting...";
@@ -178,9 +201,9 @@ mountReadWrite() {
 mountReadOnly() {
   logInfo "mountReadOnly(): Starting...";
 
-  logTrace "mountReadOnly(): Will execute: mount -o remount,ro,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}";
+  logTrace "mountReadOnly(): Will execute: $MOUNT -o remount,ro,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}";
 
-  mount -o remount,ro,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT};
+  $MOUNT -o remount,ro,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT};
 
   if [ $? -ne 0 ]; then
     logError "mountReadOnly(): Remount ro ${LOCAL_REPO_MOUNT} failed; exiting...";
@@ -196,12 +219,12 @@ mountReadOnly() {
 createWorkingCopy() { 
   logInfo "createWorkingCopy(): Starting...";
 
-  logTrace "createWorkingCopy(): Will execute: cp -al ${LOCAL_CENTOS_REPO} ${LOCAL_CENTOS_REPO_WORKING}";
+  logTrace "createWorkingCopy(): Will execute: $CP -al ${LOCAL_CENTOS_REPO} ${LOCAL_CENTOS_REPO_WORKING}";
 
-  cp -al ${LOCAL_CENTOS_REPO} ${LOCAL_CENTOS_REPO_WORKING};
+  $CP -al ${LOCAL_CENTOS_REPO} ${LOCAL_CENTOS_REPO_WORKING};
 
   if [ $? -ne 0 ]; then
-    logError "createWorkingCopy(): cp -al failed; exiting...";
+    logError "createWorkingCopy(): $CP -al failed; exiting...";
   fi;
   logInfo "createWorkingCopy(): Done.";
 }
@@ -212,20 +235,20 @@ createWorkingCopy() {
 promoteWorkingCopy() {
   logInfo "promoteWorkingCopy(): Starting...";
 
-  logTrace "promoteWorkingCopy(): Will execute: rm -rf ${LOCAL_CENTOS_REPO}";
+  logTrace "promoteWorkingCopy(): Will execute: $RM -rf ${LOCAL_CENTOS_REPO}";
 
-  rm -rf ${LOCAL_CENTOS_REPO};
+  $RM -rf ${LOCAL_CENTOS_REPO};
 
   if [ $? -ne 0 ]; then
-    logError "promoteWorkingCopy(): rm -rf failed; exiting...";
+    logError "promoteWorkingCopy(): $RM -rf failed; exiting...";
     exit 1;
   else 
-    logTrace "promoteWorkingCopy(): Will execute: mv ${LOCAL_CENTOS_REPO_WORKING} ${LOCAL_CENTOS_REPO}";
+    logTrace "promoteWorkingCopy(): Will execute: $MV ${LOCAL_CENTOS_REPO_WORKING} ${LOCAL_CENTOS_REPO}";
 
-    mv ${LOCAL_CENTOS_REPO_WORKING} ${LOCAL_CENTOS_REPO};
+    $MV ${LOCAL_CENTOS_REPO_WORKING} ${LOCAL_CENTOS_REPO};
 
     if [ $? -ne 0 ]; then
-      logError "promoteWorkingCopy(): mv failed; exiting...";
+      logError "promoteWorkingCopy(): $MV failed; exiting...";
     fi;
   fi;
   logInfo "promoteWorkingCopy(): Done.";
@@ -266,10 +289,10 @@ synchronizeLocalRepos() {
       do
         logInfo "synchronizeLocalRepos(): Syncing ${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH}";
 
-        logTrace "synchronizeLocalRepos(): Will execute: sudo su reposync -c \"rsync ${RSYNC_OPTS}  rsync://${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH} \
+        logTrace "synchronizeLocalRepos(): Will execute: $SUDO $SU ${RSYNC_USER} -c \"$RSYNC ${RSYNC_OPTS}  rsync://${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH} \
         ${LOCAL_CENTOS_REPO_WORKING}/${RELEASE_VER}/${REPO}/\"";
 
-        sudo su reposync -c "rsync ${RSYNC_OPTS} rsync://${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH} \
+        $SUDO $SU ${RSYNC_USER} -c "$RSYNC ${RSYNC_OPTS} rsync://${CENTOS_REPO_ROOT}/${RELEASE_VER}/${REPO}/${BASE_ARCH} \
         ${LOCAL_CENTOS_REPO_WORKING}/${RELEASE_VER}/${REPO}/" >> ${DETAIL_LOG} 2>&1;
 
         if [ $? -ne 0 ]; then
@@ -289,7 +312,9 @@ scanForVirii() {
 
   logTrace "scanForVirii(): Will execute: clamdscan --fdpass --multiscan --remove ${LOCAL_CENTOS_REPO_WORKING}";
 
-  clamdscan --fdpass --multiscan --remove ${LOCAL_CENTOS_REPO_WORKING} >> ${DETAIL_LOG} 2>&1;
+  CLAMDSCAN_OPT="--fdpass --multiscan --remove";
+  
+  $CLAMDSCAN ${CLAMDSCAN_OPT} ${LOCAL_CENTOS_REPO_WORKING} >> ${DETAIL_LOG} 2>&1;
 
   if [ $? -eq 1 ]; then
     logWarn "scanForVirii(): clamscan detected and removed infected files; contiuing...";
@@ -323,7 +348,7 @@ teardown() {
   mountReadOnly;
 
   logInfo "teardown(): Removing $LOCK_FILE...";
-  rm $LOCK_FILE;
+  $RM $LOCK_FILE;
 
   logInfo "teardown(): Done.";
 }
