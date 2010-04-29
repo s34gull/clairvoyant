@@ -55,6 +55,7 @@ RSYNC=/usr/bin/rsync;
 SED=/bin/sed;
 SYNC=/bin/sync;
 TOUCH=/bin/touch;
+UMOUNT=/bin/umount;
 WC=/usr/bin/wc;
 
 # If we need encryption
@@ -117,6 +118,7 @@ LOG_FATAL=0;
 
 # Default mounting options
 DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime"; 
+DEFAULT_FSCK_OPTIONS="-fn";
 
 # Unset parameters (set within setup())
 SOURCE=;
@@ -313,19 +315,13 @@ getLock() {
 checkHourlyInterval() {
   logInfo "checkHourlyInterval(): Beginning checkHourlyInterval";
   if [ $HOURLY_LAST -a -f $HOURLY_LAST -a -s $HOURLY_LAST ] ; then
-    exec 3<&0;
-    exec 0<"$HOURLY_LAST";
-    while read -r LAST;
-    do 
-      if (( $NOW_SEC < $(($LAST + $HOURLY_INTERVAL_SEC)) )) ; then
-        logInfo "checkHourlyInterval(): Will not perform hourly rotate; last hourly rotate occurred within $HOUR_INTERVAL hours.";
-        PERFORM_HOURLY_SNAPSHOT=no;
-      else
-        logInfo "checkHourlyInterval(): Will perform hourly snapshot.";
-      fi;
-      break;
-    done;
-    exec 0<&3;
+    LAST=$($CAT $HOURLY_LAST);
+    if (( $NOW_SEC < $(($LAST + $HOURLY_INTERVAL_SEC)) )) ; then
+      logInfo "checkHourlyInterval(): Will not perform hourly rotate; last hourly rotate occurred within $HOUR_INTERVAL hours.";
+      PERFORM_HOURLY_SNAPSHOT=no;
+    else
+      logInfo "checkHourlyInterval(): Will perform hourly snapshot.";
+    fi;
   else
     logInfo "checkHourlyInterval(): File $HOURLY_LAST not found; will attempt hourly snapshot.";
   fi;
@@ -339,19 +335,13 @@ checkHourlyInterval() {
 checkDailyInterval() {
   logInfo "checkDailyInterval(): Beginning checkDailyInterval...";
   if [ $DAILY_LAST -a -f $DAILY_LAST -a -s $DAILY_LAST ] ; then
-    exec 3<&0;
-    exec 0<"$DAILY_LAST";
-    while read -r LAST;
-    do 
-      if (( $NOW_SEC < $(($LAST + $DAILY_INTERVAL_SEC)) )) ; then
-        logInfo "checkDailyInterval(): Will not perform daily rotate; last daily rotate occurred within $DAY_INTERVAL day(s)";
-        PERFORM_DAILY_ROTATE=no;
-      else
-        logInfo "checkDailyInterval(): Will perform daily rotate.";
-      fi;
-      break;
-    done;
-    exec 0<&3;
+    LAST=$($CAT $DAILY_LAST);
+    if (( $NOW_SEC < $(($LAST + $DAILY_INTERVAL_SEC)) )) ; then
+      logInfo "checkDailyInterval(): Will not perform daily rotate; last daily rotate occurred within $DAY_INTERVAL day(s)";
+      PERFORM_DAILY_ROTATE=no;
+    else
+      logInfo "checkDailyInterval(): Will perform daily rotate.";
+    fi;
   else
     logInfo "checkDailyInterval(): File $DAILY_LAST not found; will attempt daily rotate.";
   fi;
@@ -365,19 +355,13 @@ checkDailyInterval() {
 checkWeeklyInterval() {
   logInfo "checkWeeklyInterval(): Beginning checkWeeklyInterval...";
   if [ $WEEKLY_LAST -a -f $WEEKLY_LAST -a -s $WEEKLY_LAST ] ; then
-    exec 3<&0;
-    exec 0<"$WEEKLY_LAST";
-    while read -r LAST;
-    do 
-      if (( $NOW_SEC < $(($LAST + $WEEKLY_INTERVAL_SEC)) )) ; then
-        logInfo "checkWeeklyInterval(): Will not perform weekly rotate; last weekly rotate occurred within $WEEK_INTERVAL week(s).";
-        PERFORM_WEEKLY_ROTATE=no;
-      else
-        logInfo "checkWeeklyInterval(): Will perform weekly rotate.";
-      fi;
-      break;
-    done;
-    exec 0<&3;
+    LAST=$($CAT $WEEKLY_LAST);
+    if (( $NOW_SEC < $(($LAST + $WEEKLY_INTERVAL_SEC)) )) ; then
+      logInfo "checkWeeklyInterval(): Will not perform weekly rotate; last weekly rotate occurred within $WEEK_INTERVAL week(s).";
+      PERFORM_WEEKLY_ROTATE=no;
+    else
+      logInfo "checkWeeklyInterval(): Will perform weekly rotate.";
+    fi;
   else
     logInfo "checkWeeklyInterval(): File $WEEKLY_LAST not found; will attempt weekly rotate.";
   fi;
@@ -482,14 +466,8 @@ createSparseImage() {
 setupLoopDevice() {
   if [ ! $LOOP_DEV ] ; then
     if [ $LOOP_DEV_STOR -a -f $LOOP_DEV_STOR -a -s $LOOP_DEV_STOR ] ; then
-      exec 3<&0;
-      exec 0<"$LOOP_DEV_STOR";
-      while read -r LOOP_DEV;
-      do 
-        logDebug "setupLoopDevice(): Read loop device from file ($LOOP_DEV)";
-        break;
-      done;
-      exec 0<&3;
+      LOOP_DEV=$($CAT $LOOP_DEV_STOR);
+      logDebug "setupLoopDevice(): Read loop device from file ($LOOP_DEV)";
     else
       logError "setupLoopDevice(): Could not read loop device from file $LOOP_DEV_STOR; exiting.";
     fi;
@@ -520,14 +498,8 @@ setupLoopDevice() {
   if [ $ENCRYPT = yes ] ; then
     if [ ! $CRYPT_DEV ] ; then
       if [ $CRYPT_DEV_STOR -a -f $CRYPT_DEV_STOR -a -s $CRYPT_DEV_STOR ] ; then
-        exec 3<&0;
-        exec 0<"$CRYPT_DEV_STOR";
-        while read -r CRYPT_DEV;
-        do 
-          logDebug "setupLoopDevice(): Read loop device from file ($CRYPT_DEV)";
-          break;
-        done;
-        exec 0<&3;
+        CRYPT_DEV=$($CAT $CRYPT_DEV_STOR);
+        logDebug "setupLoopDevice(): Read loop device from file ($CRYPT_DEV)";
       else
         logError "setupLoopDevice(): Could not read loop device from file $CRYPT_DEV_STOR; exiting.";
       fi;
@@ -562,6 +534,24 @@ mountSparseImageRW() {
   if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
       logError "mountSparseImageRW(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
   fi;
+
+  if [ $PERFORM_WEEKLY_ROTATE = yes ] ; then
+    logInfo "mountSparseImageRW(): Performing weekly file system check (repairs will NOT be attempted)...";
+    logDebug "mountSparseImageRW(): Unmounting filesystem $SPARSE_IMAGE_MOUNT";
+    logTrace "mountSparseImageRW(): $UMOUNT $SPARSE_IMAGE_MOUNT";
+    `$UMOUNT $SPARSE_IMAGE_MOUNT >> $LOG_FILE 2>&1`;
+
+    logDebug "mountSparseImageRW(): Checking file system $MOUNT_DEV";
+    logTrace "mountSparseImageRW(): $FSCK $DEFAULT_FSCK_OPTIONS $MOUNT_DEV";
+    `$FSCK $DEFAULT_FSCK_OPTIONS $MOUNT_DEV >> $LOG_FILE 2>&1`;
+    if [ $? -ne 0 ] ; then
+       logFatal "mountSparseImageRW(): $FSCK reported errors on $MOUNT_DEV; check $LOG_FILE and manually repair this voume; exiting...";
+    else
+       logInfo "mountSparseImageRW(): File system $MOUNT_DEV is clean.";
+    fi;
+  else
+    logInfo "mountSparseImageRW(): Skipping weekly file system check...";
+  fi
 
   logDebug "mountSparseImageRW(): Attempting remount...";
   logTrace "mountSparseImageRW(): $MOUNT -t $IMAGE_FS_TYPE -o remount,rw,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
@@ -884,14 +874,8 @@ setup() {
   getLock;
 
   if [ $SPARSE_IMAGE_STOR -a -f $SPARSE_IMAGE_STOR -a -s $SPARSE_IMAGE_STOR ] ; then
-    exec 3<&0;
-    exec 0<"$SPARSE_IMAGE_STOR";
-    while read -r SPARSE_IMAGE_FILE;
-    do 
-      logDebug "setup(): $SPARSE_IMAGE_STOR defines $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE for storage.";
-      break;
-    done;
-    exec 0<&3;
+    SPARSE_IMAGE_FILE=$($CAT $SPARSE_IMAGE_STOR);
+    logDebug "setup(): $SPARSE_IMAGE_STOR defines $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE for storage.";
   else
     logDebug "setup(): No sparse image file defined; creating new...";
     createSparseImage;
