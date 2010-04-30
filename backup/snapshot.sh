@@ -62,9 +62,9 @@ WC=/usr/bin/wc;
 CRYPTSETUP=/sbin/cryptsetup;
 
 #If we want to notify the user of our progress
-NOTIFY="/usr/bin/notify-send --urgency=normal --expire-time=2000 Snaphot";
+#NOTIFY="/usr/bin/notify-send --urgency=normal --expire-time=2000 Snaphot";
 # set NOTIFY to $ECHO
-#NOTIFY=/bin/echo;
+NOTIFY=/bin/echo;
 
 TEST_PROCESS="$PS -p";
 
@@ -99,14 +99,16 @@ PERFORM_WEEKLY_ROTATE=yes;
 
 # Remember, snap counts start at 0
 HOURLY_SNAP_LIMIT=23;
-DAILY_SNAP_LIMIT=29;
-WEEKLY_SNAP_LIMIT=51;
 
 # Time definitions
 NOW_SEC=`$DATE -u +%s`; # the current time
 HOUR_SEC=$((60 * 60)); # seconds per hourl
 DAY_SEC=$(($HOUR_SEC * 24)); # seconds per day
 WEEK_SEC=$(($DAY_SEC * 7));
+
+DEFAULT_HOUR_INTERVAL=1; # make snapshots every hour
+DEFAULT_DAY_INTERVAL=1; # rotate dailies once a day, every day
+DEFAULT_WEEK_INTERVAL=1; # rotate weeklies once a week, every week
 
 # LOGGING levels
 LOG_TRACE=5;
@@ -116,9 +118,11 @@ LOG_WARN=2;
 LOG_ERROR=1;
 LOG_FATAL=0;
 
-# Default mounting options
+# Default options
 DEFAULT_MOUNT_OPTIONS="nosuid,nodev,noexec,noatime,nodiratime"; 
 DEFAULT_FSCK_OPTIONS="-fn";
+DEFAULT_DAILY_SNAP_LIMIT=29;
+DEFAULT_WEEKLY_SNAP_LIMIT=51;
 
 # Unset parameters (set within setup())
 SOURCE=;
@@ -126,27 +130,19 @@ LOOP_DEV=;
 CRYPT_DEV=;
 SPARSE_IMAGE_FILE=;
 MOUNT_DEV=;
+DAILY_SNAP_LIMIT=;
+WEEKLY_SNAP_LIMIT=;
+HOURLY_INTERVAL_SEC=;
+DAILY_INTERVAL_SEC=;
+WEEKLY_INTERVAL_SEC=;
+MOUNT_OPTIONS=;
 
-# ----------------------------------------------------------------------
-# ------------- SOURCE USER-DEFINED VARIABLES --------------------------
-# ----------------------------------------------------------------------
+
+#-----------------------------------------------------------------------
+#------------- LOAD THE CONFIGURATION FILE -----------------------------
+#-----------------------------------------------------------------------
 . $CONFIG_DIR/setenv.sh;
 
-
-# ----------------------------------------------------------------------
-# ------------- MERGED VARIABLES ---------------------------------------
-# ----------------------------------------------------------------------
-
-# Append user mount options to the defaults
-MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS,$USER_MOUNT_OPTIONS";
-
-# Computed Time intervals (in seconds)
-# default is one hour, - 10% for cron miss
-HOURLY_INTERVAL_SEC=$(($HOUR_SEC * $HOUR_INTERVAL - $HOUR_SEC / 10)); 
-# default is one day, - 1% for cron miss
-DAILY_INTERVAL_SEC=$(($DAY_SEC * $DAY_INTERVAL - $DAY_SEC / 100)); 
-# default is one week, - 1% for cron miss
-WEEKLY_INTERVAL_SEC=$(($WEEK_SEC * $WEEK_INTERVAL - $WEEK_SEC / 100));
 
 #-----------------------------------------------------------------------
 #------------- FUNCTIONS -----------------------------------------------
@@ -211,6 +207,68 @@ logFatal() {
     echo "`$DATE` [$$] FATAL: $*" >> $LOG_FILE;
     $TOUCH $FATAL_LOCK_FILE;
     exit 2;
+}
+
+# ----------------------------------------------------------------------
+# ------------- MERGED VARIABLES ---------------------------------------
+# ----------------------------------------------------------------------
+mergeConfig() {
+
+  # Append user mount options to the defaults
+  logDebug "mergeUserDefined(): DEFAULT_MOUNT_OPTIONS=$DEFAULT_MOUNT_OPTIONS.";
+  if [ $MOUNT_OPTIONS ] ; then
+    logDebug "mergeUserDefined(): Using additional MOUNT_OPTIONS=$MOUNT_OPTIONS.";
+    MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS,$MOUNT_OPTIONS";
+  else
+    MOUNT_OPTIONS=$DEFAULT_MOUNT_OPTIONS;
+  fi;
+
+  # Check for override DAILY_SNAP_LIMIT and WEEKLY_SNAP_LIMIT
+  if [ $DAILY_SNAP_LIMIT ] ; then
+    logDebug "mergeUserDefined(): Using override DAILY_SNAP_LIMIT=$DAILY_SNAP_LIMIT.";
+  else
+    logDebug "mergeUserDefined(): Using default DAILY_SNAP_LIMIT=$DEFAULT_DAILY_SNAP_LIMIT.";
+    DAILY_SNAP_LIMIT=$DEFAULT_DAILY_SNAP_LIMIT;
+  fi;
+
+  if [ $WEEKLY_SNAP_LIMIT ] ; then
+    logDebug "mergeUserDefined(): Using override WEEKLY_SNAP_LIMIT=$WEEKLY_SNAP_LIMIT";
+  else
+    logDebug "mergeUserDefined(): Using default WEEKLY_SNAP_LIMIT=$DEFAULT_WEEKLY_SNAP_LIMIT.";
+    WEEKLY_SNAP_LIMIT=$DEFAULT_WEEKLY_SNAP_LIMIT;
+  fi;
+
+  # Computed Time intervals (in seconds)
+  # default is one hour, - 10% for cron miss
+  if [ $HOUR_INTERVAL ] ; then
+    logDebug "mergeUserDefined(): Using override HOUR_INTERVAL=$HOUR_INTERVAL";
+  else
+    HOUR_INTERVAL=$DEFAULT_HOUR_INTERVAL;
+    logDebug "mergeUserDefined(): Using default HOUR_INTERVAL=$DEFAULT_HOUR_INTERVAL";
+  fi;
+  HOURLY_INTERVAL_SEC=$(($HOUR_SEC * $HOUR_INTERVAL - $HOUR_SEC / 10)); 
+  logDebug "mergeUserDefined(): HOURLY_INTERVAL_SEC=$HOURLY_INTERVAL_SEC";
+
+  # default is one day, - 1% for cron miss
+  if [ $DAY_INTERVAL ] ; then
+    logDebug "mergeUserDefined(): Using override DAY_INTERVAL=$DAY_INTERVAL";
+  else
+    DAY_INTERVAL=$DEFAULT_DAY_INTERVAL;
+    logDebug "mergeUserDefined(): Using default DAY_INTERVAL=$DEFAULT_DAY_INTERVAL";
+  fi;
+  DAILY_INTERVAL_SEC=$(($DAY_SEC * $DAY_INTERVAL - $DAY_SEC / 100)); 
+  logDebug "mergeUserDefined(): DAILY_INTERVAL_SEC=$DAILY_INTERVAL_SEC";
+
+  # default is one week, - 1% for cron miss
+  if [ $WEEK_INTERVAL ] ; then
+    logDebug "mergeUserDefined(): Using override WEEK_INTERVAL=$WEEK_INTERVAL";
+  else
+    WEEK_INTERVAL=$DEFAULT_WEEK_INTERVAL;
+    logDebug "mergeUserDefined(): Using default WEEK_INTERVAL=$DEFAULT_WEEK_INTERVAL";
+  fi;
+  WEEKLY_INTERVAL_SEC=$(($WEEK_SEC * $WEEK_INTERVAL - $WEEK_SEC / 100));
+  logDebug "mergeUserDefined(): WEEKLY_INTERVAL_SEC=$WEEKLY_INTERVAL_SEC";
+
 }
 
 #-----------------------------------------------------------------------
@@ -522,6 +580,28 @@ setupLoopDevice() {
   logInfo "setupLoopDevice(): $MOUNT_DEV is ready.";
 }
 
+#-----------------------------------------------------------------------
+# filesystemCheck()
+#    Make sure that the fs is clean. If not, don't attempt repair, but 
+#    logFatal and exit(2).
+#-----------------------------------------------------------------------
+filesystemCheck() {
+  logInfo "filesystemCheck(): Starting file system check (repairs will NOT be attempted)...";
+  logDebug "filesystemCheck(): Unmounting filesystem $SPARSE_IMAGE_MOUNT";
+  logTrace "filesystemCheck(): $UMOUNT $SPARSE_IMAGE_MOUNT";
+  `$UMOUNT $SPARSE_IMAGE_MOUNT >> $LOG_FILE 2>&1`;
+  if [ $? -ne 0 ] ; then
+      logError "filesystemCheck(): Unable to $UMOUNT $SPARSE_IMAGE_MOUNT; exiting...";
+  fi;
+
+  logDebug "filesystemCheck(): Checking file system $MOUNT_DEV";
+  logTrace "filesystemCheck(): $FSCK $DEFAULT_FSCK_OPTIONS $MOUNT_DEV";
+  `$FSCK $DEFAULT_FSCK_OPTIONS $MOUNT_DEV >> $LOG_FILE 2>&1`;
+  if [ $? -ne 0 ] ; then
+      logFatal "filesystemCheck(): $FSCK reported errors on $MOUNT_DEV; check $LOG_FILE and manually repair this voume; exiting...";
+  fi;
+  logInfo "filesystemCheck(): File system check complete; $MOUNT_DEV is clean.";
+}
 
 #-----------------------------------------------------------------------
 # mountSparseImageRW()
@@ -536,19 +616,8 @@ mountSparseImageRW() {
   fi;
 
   if [ $PERFORM_WEEKLY_ROTATE = yes ] ; then
-    logInfo "mountSparseImageRW(): Performing weekly file system check (repairs will NOT be attempted)...";
-    logDebug "mountSparseImageRW(): Unmounting filesystem $SPARSE_IMAGE_MOUNT";
-    logTrace "mountSparseImageRW(): $UMOUNT $SPARSE_IMAGE_MOUNT";
-    `$UMOUNT $SPARSE_IMAGE_MOUNT >> $LOG_FILE 2>&1`;
-
-    logDebug "mountSparseImageRW(): Checking file system $MOUNT_DEV";
-    logTrace "mountSparseImageRW(): $FSCK $DEFAULT_FSCK_OPTIONS $MOUNT_DEV";
-    `$FSCK $DEFAULT_FSCK_OPTIONS $MOUNT_DEV >> $LOG_FILE 2>&1`;
-    if [ $? -ne 0 ] ; then
-       logFatal "mountSparseImageRW(): $FSCK reported errors on $MOUNT_DEV; check $LOG_FILE and manually repair this voume; exiting...";
-    else
-       logInfo "mountSparseImageRW(): File system $MOUNT_DEV is clean.";
-    fi;
+    logInfo "mountSparseImageRW(): Performing weekly file system check...";
+    filesystemCheck;
   else
     logInfo "mountSparseImageRW(): Skipping weekly file system check...";
   fi
@@ -638,12 +707,12 @@ pruneDailySnapshots() {
 pruneHourlySnapshots() {
   # step #2.5: 
   if [ -d $SPARSE_IMAGE_MOUNT/.hourly.tmp ]; then
-    logDebug "makeHourlySnapshot(): Removing stale instance .hourly.tmp ...";
-    logTrace "makeHourlySnapshot(): \
+    logDebug "pruneHourlySnapshots(): Removing stale instance .hourly.tmp ...";
+    logTrace "pruneHourlySnapshots(): \
       $RM -rf $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1";
     $RM -rf $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
-      logError "makeHourlySnapshot(): remove encountered an error; exiting.";
+      logError "pruneHourlySnapshots(): remove encountered an error; exiting.";
     fi;
   fi;
 
@@ -822,14 +891,14 @@ makeHourlySnapshot() {
       $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1;";
     $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
-      logError "makeHourlySnapshot(): Unable to create $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE; exiting.";
+      logError "makeHourlySnapshot(): Unable to create $SPARSE_IMAGE_MOUNT/.hourly.tmp; exiting.";
     fi;
   fi;
 
-  logDebug "makeHourlySnapshot(): Performing copy of $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE to  $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE ...";
+  logDebug "makeHourlySnapshot(): Performing copy of $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE to  $SPARSE_IMAGE_MOUNT/.hourly.tmp/ ...";
   logTrace "makeHourlySnapshot(): \
-    $CP -alr $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1";
-  $CP -alr $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE $SPARSE_IMAGE_MOUNT/.hourly.tmp >>  $LOG_FILE 2>&1;
+    $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/../ >> $LOG_FILE 2>&1";
+  $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/../ >>  $LOG_FILE 2>&1;
   if [ $? -ne 0 ] ; then
     logError "makeHourlySnapshot(): copy encountered an error; exiting.";
   fi;
@@ -846,9 +915,8 @@ makeHourlySnapshot() {
   logDebug "makeHourlySnapshot(): rsync complete.";
 
   # step 4: update the mtime of hourly.0 to reflect the snapshot time
-  logTrace "makeHourlySnapshot(): $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/";
-  $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/ ;
-  $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp/;
+  logTrace "makeHourlySnapshot(): $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp";
+  $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp;
   
   # step 5: update the hourly timestamp with current time
   $TOUCH $HOURLY_LAST;
@@ -869,6 +937,7 @@ makeHourlySnapshot() {
 setup() {
 
   logInfo "setup(): Beginning setup ...";
+  mergeConfig;
   checkUser;
   checkFields;
   getLock;

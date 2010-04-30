@@ -22,7 +22,11 @@ PASSPHRASE=; # if ENCRYPT=yes then you must provide a passphrase
 #-----------------------------------------------------------------------
 #------------- User Defined Intervals Parameters -----------------------
 #-----------------------------------------------------------------------
-HOUR_INTERVAL=1; # make snapshots every hour
-DAY_INTERVAL=1; # rotate dailies once a day, every day
-WEEK_INTERVAL=1; # rotate weeklies once a week, every week
+#HOUR_INTERVAL=1; # make snapshots every hour
+#DAY_INTERVAL=1; # rotate dailies once a day, every day
+#WEEK_INTERVAL=1; # rotate weeklies once a week, every week
+
+# Remember, snap counts start at 0; you cannot alter the HOURLY_SNAP_LIMIT=23
+#DAILY_SNAP_LIMIT=29;
+#WEEKLY_SNAP_LIMIT=51;
 
