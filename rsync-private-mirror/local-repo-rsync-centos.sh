@@ -17,6 +17,7 @@ RM=/bin/rm;
 RSYNC=/usr/bin/rsync;
 SU=/bin/su;
 SUDO=/usr/bin/sudo;
+SYNC=/bin/sync;
 TOUCH=/bin/touch;
 CLAMDSCAN=/usr/bin/clamdscan
 # ---------------------------------------------------------------------
@@ -295,6 +296,9 @@ synchronizeLocalRepos() {
       done;
     done;
   done;
+
+  $SYNC;
+
   logInfo "synchronizeLocalRepos(): Done.";
 }
 
@@ -306,7 +310,7 @@ scanForVirii() {
 
   logTrace "scanForVirii(): Will execute: clamdscan --fdpass --multiscan --remove ${LOCAL_CENTOS_REPO_WORKING}";
 
-  CLAMDSCAN_OPT="--fdpass --multiscan --remove";
+  CLAMDSCAN_OPT="--fdpass --remove";
   
   $CLAMDSCAN ${CLAMDSCAN_OPT} ${LOCAL_CENTOS_REPO_WORKING} >> ${DETAIL_LOG} 2>&1;
 
@@ -317,6 +321,9 @@ scanForVirii() {
       logError "scanForVirii(): clamscan encountered an error; exiting...";
     fi;
   fi; 
+
+  $SYNC;
+
   logInfo "scanForVirii(): Done.";
 }
 
