@@ -5,9 +5,11 @@ unset PATH
 # Include external commands here for portability
 
 CAT=/bin/cat;
+CLAMDSCAN=/usr/bin/clamdscan
 CP=/bin/cp;
 DATE=/bin/date;
 ECHO=/bin/echo;
+FSCK=/sbin/fsck;
 GREP=/bin/grep;
 MKDIR=/bin/mkdir;
 MOUNT=/bin/mount;
@@ -19,10 +21,9 @@ SU=/bin/su;
 SUDO=/usr/bin/sudo;
 SYNC=/bin/sync;
 TOUCH=/bin/touch;
-CLAMDSCAN=/usr/bin/clamdscan
+UMOUNT=/bin/umount;
+
 # ---------------------------------------------------------------------
-
-
 #
 # The following actions apply to the following repositories:
 # CentOS 4 x86_64 (skip i386);
@@ -31,15 +32,16 @@ CLAMDSCAN=/usr/bin/clamdscan
 
 RSYNC_USER=reposync;
 
-LOCAL_REPO_MOUNT=/var/www/repos
-LOCAL_CENTOS_REPO=${LOCAL_REPO_MOUNT}/centos
-LOCAL_CENTOS_REPO_WORKING=${LOCAL_REPO_MOUNT}/.centos
+LOCAL_REPO_DEV=/dev/mapper/raid10--vol--group-centos--repo--lv;
+LOCAL_REPO_MOUNT=/var/www/repos;
+LOCAL_CENTOS_REPO=${LOCAL_REPO_MOUNT}/centos;
+LOCAL_CENTOS_REPO_WORKING=${LOCAL_REPO_MOUNT}/.centos;
 
-CENTOS_MIRROT_SITE=centos.mirrors.tds.net
-CENTOS_REPO_ROOT=${CENTOS_MIRROT_SITE}/CentOS
+CENTOS_MIRROT_SITE=centos.mirrors.tds.net;
+CENTOS_REPO_ROOT=${CENTOS_MIRROT_SITE}/CentOS;
 
-MESSAGE_LOG=/var/log/messages
-DETAIL_LOG=/var/log/local-repo-rsync-centos.log
+MESSAGE_LOG=/var/log/messages;
+DETAIL_LOG=/var/log/local-repo-rsync-centos.log;
 
 LOCK_DIR=/var/lock/local-repo-rsync-centos.d;
 FATAL_LOCK_FILE=$LOCK_DIR/fatal.lock;
@@ -66,7 +68,7 @@ NOTIFY=$ECHO;
 
 #-----------------------------------------------------------------------
 # Logging functions; all output is echo'd to console and/or appended to
-# $LOG_FILE
+# $MESSAGE_LOG
 #-----------------------------------------------------------------------
 echoConsole() {
     if [ $SILENT = no ]; then
@@ -174,18 +176,47 @@ getLock() {
   logInfo "getLock(): Done.";
 }
 
+#-----------------------------------------------------------------------
+# filesystemCheck()
+#    Make sure that the fs is clean. If not, don't attempt repair, but 
+#    logFatal and exit(2).
+#-----------------------------------------------------------------------
+filesystemCheck() {
+  logInfo "filesystemCheck(): Starting file system check (repairs will NOT be attempted)...";
+  logDebug "filesystemCheck(): Unmounting filesystem $LOCAL_REPO_MOUNT";
+  logTrace "filesystemCheck(): $UMOUNT $LOCAL_REPO_MOUNT";
+  `$UMOUNT $LOCAL_REPO_MOUNT >> $MESSAGE_LOG 2>&1`;
+  if [ $? -ne 0 ] ; then
+      logError "filesystemCheck(): Unable to $UMOUNT $LOCAL_REPO_MOUNT; exiting...";
+  fi;
+
+  logDebug "filesystemCheck(): Checking file system $LOCAL_REPO_DEV";
+  logTrace "filesystemCheck(): $FSCK -fy $LOCAL_REPO_DEV";
+  `$FSCK -fy $LOCAL_REPO_DEV >> $MESSAGE_LOG 2>&1`;
+  if [ $? -ne 0 ] ; then
+      logFatal "filesystemCheck(): $FSCK reported errors on $LOCAL_REPO_DEV; repairs are being attempted; exiting...";
+  fi;
+  logInfo "filesystemCheck(): File system check complete; $LOCAL_REPO_DEV is clean.";
+}
+
 #
 # Remount LOCAL_REPO_MOUNT as read-write for update
 #
 mountReadWrite() {
   logInfo "mountReadWrite(): Starting...";
 
-  logTrace "mountReadWrite(): Will execute: $MOUNT -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}";
+  filesystemCheck;
 
-  $MOUNT -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT};
+  logTrace "mountReadWrite(): Will execute: $MOUNT -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}";
+  $MOUNT -o remount,rw,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT} >> $MESSAGE_LOG 2>&1;
 
   if [ $? -ne 0 ]; then
-    logError "mountReadWrite() Remount rw ${LOCAL_REPO_MOUNT} failed; exiting...";
+    logWarn "mountReadWrite(): Trying without -o remount";
+    logTrace "mountReadWrite(): $MOUNT -o rw,noatime,nodiratime,noexec $LOCAL_REPO_DEV $LOCAL_REPO_MOUNT  >> $MESSAGE_LOG 2>&1";
+    `$MOUNT -o rw,noatime,nodiratime,noexec $LOCAL_REPO_DEV $LOCAL_REPO_MOUNT  >> $MESSAGE_LOG 2>&1`;
+    if [ $? -ne 0 ] ; then
+      logError "mountReadWrite(): Could not re-mount $MOUNT_DEV to $SPARSE_IMAGE_MOUNT readwrite";
+    fi;
   fi;
   logInfo "mountReadWrite(): Done.";
 }
@@ -197,8 +228,7 @@ mountReadOnly() {
   logInfo "mountReadOnly(): Starting...";
 
   logTrace "mountReadOnly(): Will execute: $MOUNT -o remount,ro,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT}";
-
-  $MOUNT -o remount,ro,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT};
+  $MOUNT -o remount,ro,noatime,nodiratime,noexec ${LOCAL_REPO_MOUNT} >> $MESSAGE_LOG 2>&1;
 
   if [ $? -ne 0 ]; then
     logError "mountReadOnly(): Remount ro ${LOCAL_REPO_MOUNT} failed; exiting...";
@@ -214,9 +244,18 @@ mountReadOnly() {
 createWorkingCopy() { 
   logInfo "createWorkingCopy(): Starting...";
 
+  if [ -d ${LOCAL_CENTOS_REPO_WORKING} ] ; then
+    logInfo "createWorkingCopy(): Found old working directory ${LOCAL_CENTOS_REPO_WORKING}; deleting...";
+    logTrace "createWorkingCopy(): Will execute: $RM -rf ${LOCAL_CENTOS_REPO_WORKING} >> $MESSAGE_LOG 2>&1";
+    $RM -rf ${LOCAL_CENTOS_REPO_WORKING} >> $MESSAGE_LOG 2>&1;
+      if [ $? -ne 0 ]; then
+        logError "createWorkingCopy(): $RM -rf failed; exiting...";
+      fi;
+  fi;
+
   logTrace "createWorkingCopy(): Will execute: $CP -al ${LOCAL_CENTOS_REPO} ${LOCAL_CENTOS_REPO_WORKING}";
 
-  $CP -al ${LOCAL_CENTOS_REPO} ${LOCAL_CENTOS_REPO_WORKING};
+  $CP -al ${LOCAL_CENTOS_REPO} ${LOCAL_CENTOS_REPO_WORKING} >> $MESSAGE_LOG 2>&1;
 
   if [ $? -ne 0 ]; then
     logError "createWorkingCopy(): $CP -al failed; exiting...";
@@ -232,7 +271,7 @@ promoteWorkingCopy() {
 
   logTrace "promoteWorkingCopy(): Will execute: $RM -rf ${LOCAL_CENTOS_REPO}";
 
-  $RM -rf ${LOCAL_CENTOS_REPO};
+  $RM -rf ${LOCAL_CENTOS_REPO} >> $MESSAGE_LOG 2>&1;
 
   if [ $? -ne 0 ]; then
     logError "promoteWorkingCopy(): $RM -rf failed; exiting...";
@@ -240,7 +279,7 @@ promoteWorkingCopy() {
   else 
     logTrace "promoteWorkingCopy(): Will execute: $MV ${LOCAL_CENTOS_REPO_WORKING} ${LOCAL_CENTOS_REPO}";
 
-    $MV ${LOCAL_CENTOS_REPO_WORKING} ${LOCAL_CENTOS_REPO};
+    $MV ${LOCAL_CENTOS_REPO_WORKING} ${LOCAL_CENTOS_REPO} >> $MESSAGE_LOG 2>&1;
 
     if [ $? -ne 0 ]; then
       logError "promoteWorkingCopy(): $MV failed; exiting...";
@@ -349,7 +388,7 @@ teardown() {
   mountReadOnly;
 
   logInfo "teardown(): Removing $LOCK_FILE...";
-  $RM $LOCK_FILE;
+  $RM $LOCK_FILE >> $MESSAGE_LOG 2>&1;
 
   logInfo "teardown(): Done.";
 }
