@@ -587,11 +587,15 @@ setupLoopDevice() {
 #-----------------------------------------------------------------------
 filesystemCheck() {
   logInfo "filesystemCheck(): Starting file system check (repairs will NOT be attempted)...";
-  logDebug "filesystemCheck(): Unmounting filesystem $SPARSE_IMAGE_MOUNT";
-  logTrace "filesystemCheck(): $UMOUNT $SPARSE_IMAGE_MOUNT";
-  `$UMOUNT $SPARSE_IMAGE_MOUNT >> $LOG_FILE 2>&1`;
-  if [ $? -ne 0 ] ; then
-      logError "filesystemCheck(): Unable to $UMOUNT $SPARSE_IMAGE_MOUNT; exiting...";
+  logDebug "filesystemCheck(): Determining if $SPARSE_IMAGE_MOUNT is mounted";
+  MOUNT_EXISTS=`$MOUNT | $GREP $SPARSE_IMAGE_MOUNT | $WC -c`;
+  if [ $MOUNT_EXISTS != 0 ] ; then
+    logDebug "filesystemCheck(): Unmounting filesystem $SPARSE_IMAGE_MOUNT";
+    logTrace "filesystemCheck(): $UMOUNT $SPARSE_IMAGE_MOUNT";
+    `$UMOUNT $SPARSE_IMAGE_MOUNT >> $LOG_FILE 2>&1`;
+    if [ $? -ne 0 ] ; then
+        logError "filesystemCheck(): Unable to $UMOUNT $SPARSE_IMAGE_MOUNT; exiting...";
+    fi;
   fi;
 
   logDebug "filesystemCheck(): Checking file system $MOUNT_DEV";
