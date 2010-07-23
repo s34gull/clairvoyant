@@ -27,9 +27,9 @@
 # ----------------------------------------------------------------------
 unset PATH
 
-# -------------COMMANDS------------------------------------------------
+# -------------COMMANDS-------------------------------------------------
 # Include external commands here for portability
-
+#-----------------------------------------------------------------------
 CAT=/bin/cat;
 CLAMDSCAN=/usr/bin/clamdscan
 CP=/bin/cp;
@@ -49,13 +49,7 @@ SYNC=/bin/sync;
 TOUCH=/bin/touch;
 UMOUNT=/bin/umount;
 
-# ---------------------------------------------------------------------
-#
-# The following actions apply to the following repositories:
-# CentOS 4 x86_64 (skip i386);
-# CentOS 5 i386 and x86_64
-# 
-
+#--------------VARIABLES------------------------------------------------
 RSYNC_USER=reposync;
 
 LOCAL_REPO_DEV=/dev/mapper/raid10--vol--group-centos--repo--lv;
@@ -225,9 +219,10 @@ filesystemCheck() {
   logInfo "filesystemCheck(): File system check complete; $LOCAL_REPO_DEV is clean.";
 }
 
-#
-# Remount LOCAL_REPO_MOUNT as read-write for update
-#
+#-----------------------------------------------------------------------
+# mountReadWrite()
+#   Remount LOCAL_REPO_MOUNT as read-write for update
+#-----------------------------------------------------------------------
 mountReadWrite() {
   logInfo "mountReadWrite(): Starting...";
 
@@ -247,9 +242,10 @@ mountReadWrite() {
   logInfo "mountReadWrite(): Done.";
 }
 
-#
-# Remount the LOCAL_REPO_MOUNT as read-only
-#
+#-----------------------------------------------------------------------
+# mountReadOnly()
+#   Remount the LOCAL_REPO_MOUNT as read-only
+#-----------------------------------------------------------------------
 mountReadOnly() {
   logInfo "mountReadOnly(): Starting...";
 
@@ -262,11 +258,12 @@ mountReadOnly() {
   logInfo "mountReadOnly(): Done.";
 }
 
-#
-# Create a working copy of the current local repository using hard links
-# to minimize space and preserving modification times so that rsync
-# will handle diffs properly. All work takes place in the working copy.
-#
+#-----------------------------------------------------------------------
+# createWorkingCopy()
+#  Create a working copy of the current local repository using hard links
+#  to minimize space and preserving modification times so that rsync
+#  will handle diffs properly. All work takes place in the working copy.
+#-----------------------------------------------------------------------
 createWorkingCopy() { 
   logInfo "createWorkingCopy(): Starting...";
 
@@ -289,9 +286,10 @@ createWorkingCopy() {
   logInfo "createWorkingCopy(): Done.";
 }
 
-#
-# Replace the stale CentOS repo with the now vetted working copy.
-#
+#-----------------------------------------------------------------------
+# promoteWorkingCopy()
+#   Replace the stale CentOS repo with the now vetted working copy.
+#-----------------------------------------------------------------------
 promoteWorkingCopy() {
   logInfo "promoteWorkingCopy(): Starting...";
 
@@ -314,12 +312,14 @@ promoteWorkingCopy() {
   logInfo "promoteWorkingCopy(): Done.";
 }
 
-#
-# Loop over CentOS 4 and 5 for i386 and x86_64, performing and rsync against
-# a Tier 1 CentOS mirror. Require port 873 be opened for the mirror defined in
-# CENTOS_MIRROT_SITE. Failures for an individual file will not stop the sync;
-# Failures for an individual REPO will not stop the sync.
-#
+#-----------------------------------------------------------------------
+# synchronizeLocalRepos()
+#   Loop over CentOS 4 and 5 for i386 and x86_64, performing and rsync 
+#   against a Tier 1 CentOS mirror. Require port 873 be opened for the 
+#   mirror defined in CENTOS_MIRROT_SITE. Failures for an individual 
+#   file will not stop the sync; failures for an individual REPO
+#   WILL NOT stop the sync.
+#-----------------------------------------------------------------------
 synchronizeLocalRepos() {
   logInfo "synchronizeLocalRepos(): Starting...";
   
@@ -367,9 +367,11 @@ synchronizeLocalRepos() {
   logInfo "synchronizeLocalRepos(): Done.";
 }
 
-#
-# Perform virus scan of the newly downloaded files. Infected files will be deleted.
-#
+#-----------------------------------------------------------------------
+# scanForVirii()
+#   Perform virus scan of the newly downloaded files. Infected files 
+ #  will be deleted.
+#-----------------------------------------------------------------------
 scanForVirii() {
   logInfo "scanForVirii(): Starting...";
 
@@ -392,9 +394,10 @@ scanForVirii() {
   logInfo "scanForVirii(): Done.";
 }
 
-#
-#
-#
+#-----------------------------------------------------------------------
+# startup()
+#   Function which coordinates intialization activities.
+#-----------------------------------------------------------------------
 startup() {
   logInfo "startup(): Starting...";
 
@@ -404,10 +407,10 @@ startup() {
 
   logInfo "startup(): Done.";
 }
-
-#
-#
-#
+#-----------------------------------------------------------------------
+# teardown()
+#   Function which coordinates shutdown/cleanup activities.
+#-----------------------------------------------------------------------
 teardown() {
   logInfo "teardown(): Starting...";
 
@@ -419,9 +422,10 @@ teardown() {
   logInfo "teardown(): Done.";
 }
 
-#
-# main coordinates all of the other functions
-#
+#-----------------------------------------------------------------------
+# main()
+#   main coordinates all functions.
+#-----------------------------------------------------------------------
 main() {
   LOG_LEVEL=${LOG_WARN};
 
@@ -444,7 +448,7 @@ main() {
   exit 0;
 }
 
-#
+#-----------------------------------------------------------------------
 # Invoke main
-#
+#-----------------------------------------------------------------------
 main;
