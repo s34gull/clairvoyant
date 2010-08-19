@@ -871,13 +871,8 @@ rotateWeeklySnapshot() {
 makeHourlySnapshot() {
   logInfo "makeHourlySnapshot(): Beginning makeHourlySnapshot...";
 
-  # step 1: extrapolate the exclude filename from $SOURCE
-  EXCLUDE_FILE=`$ECHO "$SOURCE" | $SED "s/\//./g"`
-  EXCLUDE_FILE=$EXCLUDE_FILE.exclude
-  
-  # step 2: define rsync options
-  RSYNC_OPTS="--archive --sparse --partial --delete --delete-excluded \
-      --exclude-from=$EXCLUDE_DIR/$EXCLUDE_FILE";
+  # step 1: define rsync options
+  RSYNC_OPTS="--archive --sparse --partial --delete --delete-excluded";
 
   if [ $LOG_LEVEL -ge $LOG_INFO ] ; then
     RSYNC_OPTS="--stats $RSYNC_OPTS";
@@ -891,35 +886,53 @@ makeHourlySnapshot() {
     RSYNC_OPTS="--progress $RSYNC_OPTS";
   fi;
 
-  # step #2.5: cp -al $SPARSE_IMAGE_MOUNT/hourly.0 to $SPARSE_IMAGE_MOUNT/hourly.tmp
-  if [ ! -d $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE ]; then
-    logDebug "makeHourlySnapshot(): $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE does not exist; creating ...";
-    logTrace "makeHourlySnapshot(): \ 
-      $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1;";
-    $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1;
-    if [ $? -ne 0 ] ; then
-      logError "makeHourlySnapshot(): Unable to create $SPARSE_IMAGE_MOUNT/.hourly.tmp; exiting.";
+  # Perform all $SOURCE based logic in this block
+  exec 3<&0;
+  exec 0<"$INCLUDES";
+  while read -r SOURCE;
+  do
+    logInfo "makeHourlySnapshot(): Taking snapshot of /$SOURCE...";
+
+    # step #2.5: cp -al $SPARSE_IMAGE_MOUNT/hourly.0 to $SPARSE_IMAGE_MOUNT/hourly.tmp
+    if [ ! -d $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE ]; then
+      logDebug "makeHourlySnapshot(): $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE does not exist; creating ...";
+      logTrace "makeHourlySnapshot(): \ 
+        $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1;";
+      $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1;
+      if [ $? -ne 0 ] ; then
+        logError "makeHourlySnapshot(): Unable to create $SPARSE_IMAGE_MOUNT/.hourly.tmp; exiting.";
+      fi;
     fi;
-  fi;
 
-  logDebug "makeHourlySnapshot(): Performing copy of $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE to  $SPARSE_IMAGE_MOUNT/.hourly.tmp/ ...";
-  logTrace "makeHourlySnapshot(): \
-    $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/../ >> $LOG_FILE 2>&1";
-  $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/../ >>  $LOG_FILE 2>&1;
-  if [ $? -ne 0 ] ; then
-    logError "makeHourlySnapshot(): copy encountered an error; exiting.";
-  fi;
-  logDebug "makeHourlySnapshot(): copy complete.";
+    if [ -d $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE ]; then
+      logDebug "makeHourlySnapshot(): Performing copy of $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE to  $SPARSE_IMAGE_MOUNT/.hourly.tmp/ ...";
+      logTrace "makeHourlySnapshot(): \
+        $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/../ >> $LOG_FILE 2>&1";
+      $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/../ >>  $LOG_FILE 2>&1;
+      if [ $? -ne 0 ] ; then
+        logError "makeHourlySnapshot(): copy encountered an error; exiting.";
+      fi;
+      logDebug "makeHourlySnapshot(): copy complete.";
+    fi;
 
-  # step #3: perform the rsync
-  logDebug "makeHourlySnapshot(): Performing rsync...";
-  logTrace "makeHourlySnapshot(): \
-    $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/ >> $LOG_FILE 2>&1";
-  $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/ >>  $LOG_FILE 2>&1;
-  if [ $? -ne 0 ] ; then
-    logWarn "makeHourlySnapshot(): rsync encountered an error; continuing ...";
-  fi;
-  logDebug "makeHourlySnapshot(): rsync complete.";
+    # step 1: extrapolate the exclude filename from $SOURCE
+    EXCLUDE_FILE=`$ECHO "$SOURCE" | $SED "s/\//./g"`
+    EXCLUDE_FILE=$EXCLUDE_FILE.exclude
+    RSYNC_OPTS="$RSYNC_OPTS --exclude-from=$EXCLUDE_DIR/$EXCLUDE_FILE";
+
+    # step #3: perform the rsync
+    logDebug "makeHourlySnapshot(): Performing rsync...";
+    logTrace "makeHourlySnapshot(): \
+      $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/ >> $LOG_FILE 2>&1";
+    $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/ >>  $LOG_FILE 2>&1;
+    if [ $? -ne 0 ] ; then
+      logWarn "makeHourlySnapshot(): rsync encountered an error; continuing ...";
+    fi;
+    logDebug "makeHourlySnapshot(): rsync complete.";
+
+    logInfo "makeHourlySnapshot(): Completed snapshot of /$SOURCE.";
+  done;
+  exec 0<&3;
 
   # step 4: update the mtime of hourly.0 to reflect the snapshot time
   logTrace "makeHourlySnapshot(): $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp";
@@ -930,6 +943,13 @@ makeHourlySnapshot() {
   $ECHO "`$DATE -u +%s`" > $HOURLY_LAST;
 
   logInfo "makeHourlySnapshot(): Done.";
+}
+
+checkFileSystem() {
+  # If btrfs then replace prune and make functions with btrfs impl
+  if (($IMAGE_FS_TYPE == "btrfs")) then;
+    . /usr/sbin/local/snapshot-btrfs.sh;
+  fi;
 }
 
 #-----------------------------------------------------------------------
@@ -976,18 +996,7 @@ setup() {
   mountSparseImageRW;
 
   if [ $INCLUDES -a -f $INCLUDES -a -s $INCLUDES ] ; then
-    exec 3<&0;
-    exec 0<"$INCLUDES";
-    while read -r SOURCE;
-    do
-      if [ ! -d $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE ] ; then
-        logDebug "setup(): Creating new snapshot directory $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE";
-        logTrace "setup(): $MKDIR -p $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE >> $LOG_FILE 2>&1";
-        $MKDIR -p $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE >> $LOG_FILE 2>&1;
-      fi;
-      logDebug "setup(): Will take snapshot of /$SOURCE.";
-    done;
-    exec 0<&3;
+    logDebug "setup(): Source listing present; proceeding.";
   else
     logError "setup(): Source listing is empty; verify entries in $INCLUDES; exiting.";
   fi;
@@ -1102,26 +1111,14 @@ main() {
 
   pruneSnapshots;
 
-  exec 3<&0;
-  exec 0<"$INCLUDES";
-  while read -r SOURCE;
-  do
-    logInfo "main(): Taking snapshot of /$SOURCE...";
-
-    if [ $PERFORM_HOURLY_SNAPSHOT = yes ] ; then
-      logInfo "main(): Performing hourly snapshot creation...";
-      makeHourlySnapshot;
-    else
-      logInfo "main(): Skipping hourly snapshot creation...";
-    fi
-
-    logInfo "main(): Completed snapshot of /$SOURCE.";
-  done;
-  exec 0<&3;
-
-  rotateSnapshots;
-
-  pruneSnapshots;
+  if [ $PERFORM_HOURLY_SNAPSHOT = yes ] ; then
+    logInfo "main(): Performing hourly snapshot creation...";
+    makeHourlySnapshot;
+    rotateSnapshots;
+    pruneSnapshots;
+  else
+    logInfo "main(): Skipping hourly snapshot creation...";
+  fi
 
   teardown;
   
