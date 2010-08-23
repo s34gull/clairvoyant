@@ -184,8 +184,6 @@ makeHourlySnapshot() {
     fi;
   fi;
 
-  $CHMOD 755 $SPARSE_IMAGE_MOUNT/.hourly.tmp;
-
   # Perform all $SOURCE based logic in this block
   exec 3<&0;
   exec 0<"$INCLUDES";
@@ -224,6 +222,10 @@ makeHourlySnapshot() {
   # step 5: update the hourly timestamp with current time
   $TOUCH $HOURLY_LAST;
   $ECHO "`$DATE -u +%s`" > $HOURLY_LAST;
+
+  # step 6: make the subvolume readable by everyone
+  # by default, new subvolumes are 700
+  $CHMOD 755 $SPARSE_IMAGE_MOUNT/.hourly.tmp;
 
   logInfo "makeHourlySnapshot(): Done.";
 }
