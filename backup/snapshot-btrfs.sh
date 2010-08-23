@@ -35,6 +35,7 @@
 # Include external commands here for portability
 # ----------------------------------------------------------------------
 BTRFS=/sbin/btrfs
+CHMOD=/bin/chmod
 
 #-----------------------------------------------------------------------
 # pruneWeeklySnapshots()
@@ -154,6 +155,8 @@ makeHourlySnapshot() {
       logError "makeHourlySnapshot(): Unable to create $SPARSE_IMAGE_MOUNT/.hourly.tmp; exiting.";
     fi;
   fi;
+
+  $CHMOD 755 $SPARSE_IMAGE_MOUNT/.hourly.tmp;
 
   # Perform all $SOURCE based logic in this block
   exec 3<&0;

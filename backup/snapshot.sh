@@ -945,13 +945,6 @@ makeHourlySnapshot() {
   logInfo "makeHourlySnapshot(): Done.";
 }
 
-checkFileSystem() {
-  # If btrfs then replace prune and make functions with btrfs impl
-  if (($IMAGE_FS_TYPE == "btrfs")) then;
-    . /usr/sbin/local/snapshot-btrfs.sh;
-  fi;
-}
-
 #-----------------------------------------------------------------------
 #------------- ORCHESTRATING FUNCTIONS ---------------------------------
 #-----------------------------------------------------------------------
@@ -968,6 +961,10 @@ setup() {
   checkUser;
   checkFields;
   getLock;
+
+  if (($IMAGE_FS_TYPE == "btrfs")) ; then
+    . /usr/local/sbin/snapshot-btrfs.sh;
+  fi;
 
   if [ $SPARSE_IMAGE_STOR -a -f $SPARSE_IMAGE_STOR -a -s $SPARSE_IMAGE_STOR ] ; then
     SPARSE_IMAGE_FILE=$($CAT $SPARSE_IMAGE_STOR);
