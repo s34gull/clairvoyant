@@ -74,6 +74,9 @@ TEST_PROCESS="$PS -p";
 # ----------------------------------------------------------------------
 # ------------- GLOBAL VARIABLES ---------------------------------------
 # ----------------------------------------------------------------------
+# Filesystem specific scripts
+SNAPSHOT_BTRFS=/usr/local/sbin/snapshot-btrfs.sh;
+
 # These persistent configuration files are user created
 CONFIG_DIR=/usr/local/etc/snapshot
 INCLUDES=$CONFIG_DIR/include;
@@ -963,7 +966,7 @@ setup() {
   getLock;
 
   if (($IMAGE_FS_TYPE == "btrfs")) ; then
-    . /usr/local/sbin/snapshot-btrfs.sh;
+    . $SNAPSHOT_BTRFS;
   fi;
 
   if [ $SPARSE_IMAGE_STOR -a -f $SPARSE_IMAGE_STOR -a -s $SPARSE_IMAGE_STOR ] ; then
