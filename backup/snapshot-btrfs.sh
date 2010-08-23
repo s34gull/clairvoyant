@@ -35,7 +35,35 @@
 # Include external commands here for portability
 # ----------------------------------------------------------------------
 BTRFS=/sbin/btrfs
+BTRFSCK=/sbin/btrfsck
 CHMOD=/bin/chmod
+
+#-----------------------------------------------------------------------
+# filesystemCheck()
+#    Make sure that the fs is clean. If not, don't attempt repair, but 
+#    logFatal and exit(2).
+#-----------------------------------------------------------------------
+filesystemCheck() {
+  logInfo "filesystemCheck(): Starting file system check (repairs will NOT be attempted)...";
+  logDebug "filesystemCheck(): Determining if $SPARSE_IMAGE_MOUNT is mounted";
+  MOUNT_EXISTS=`$MOUNT | $GREP $SPARSE_IMAGE_MOUNT | $WC -c`;
+  if [ $MOUNT_EXISTS != 0 ] ; then
+    logDebug "filesystemCheck(): Unmounting filesystem $SPARSE_IMAGE_MOUNT";
+    logTrace "filesystemCheck(): $UMOUNT $SPARSE_IMAGE_MOUNT";
+    `$UMOUNT $SPARSE_IMAGE_MOUNT >> $LOG_FILE 2>&1`;
+    if [ $? -ne 0 ] ; then
+        logError "filesystemCheck(): Unable to $UMOUNT $SPARSE_IMAGE_MOUNT; exiting...";
+    fi;
+  fi;
+
+  logDebug "filesystemCheck(): Checking file system $MOUNT_DEV";
+  logTrace "filesystemCheck(): $FSCK $DEFAULT_FSCK_OPTIONS $MOUNT_DEV";
+  `$BTRFSCK $MOUNT_DEV >> $LOG_FILE 2>&1`;
+  if [ $? -ne 0 ] ; then
+      logFatal "filesystemCheck(): $FSCK reported errors on $MOUNT_DEV; check $LOG_FILE and manually repair this voume; exiting...";
+  fi;
+  logInfo "filesystemCheck(): File system check complete; $MOUNT_DEV is clean.";
+}
 
 #-----------------------------------------------------------------------
 # pruneWeeklySnapshots()
