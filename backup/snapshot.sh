@@ -965,7 +965,8 @@ setup() {
   checkFields;
   getLock;
 
-  if (($IMAGE_FS_TYPE == "btrfs")) ; then
+  if [ "$IMAGE_FS_TYPE" == "btrfs" ] ; then
+    logWarn "setup(): Using ***EXPERIMENTAL*** filesystem, btrfs."
     . $SNAPSHOT_BTRFS;
   fi;
 
