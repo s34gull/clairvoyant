@@ -36,6 +36,7 @@ unset PATH
 # Include external commands here for portability
 # ----------------------------------------------------------------------
 CAT=/bin/cat;
+CHMOD=/bin/chmod;
 CP=/bin/cp;
 CUT=/usr/bin/cut;
 DD=/bin/dd;
@@ -889,6 +890,19 @@ makeHourlySnapshot() {
     RSYNC_OPTS="--progress $RSYNC_OPTS";
   fi;
 
+  # step 1.5: create the $SPARSE_IMAGE_MOUNT/.hourly.tmp directory 
+  # and make it read/write for root only.
+  if [ ! -d $SPARSE_IMAGE_MOUNT/.hourly.tmp ]; then
+    logDebug "makeHourlySnapshot(): $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE does not exist; creating ...";
+    logTrace "makeHourlySnapshot(): \ 
+      $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1;";
+    $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1;
+    if [ $? -ne 0 ] ; then
+      logError "makeHourlySnapshot(): Unable to create $SPARSE_IMAGE_MOUNT/.hourly.tmp; exiting.";
+    fi;
+  fi;
+  $CHMOD 700 $SPARSE_IMAGE_MOUNT/.hourly.tmp; 
+
   # Perform all $SOURCE based logic in this block
   exec 3<&0;
   exec 0<"$INCLUDES";
@@ -896,7 +910,7 @@ makeHourlySnapshot() {
   do
     logInfo "makeHourlySnapshot(): Taking snapshot of /$SOURCE...";
 
-    # step #2.5: cp -al $SPARSE_IMAGE_MOUNT/hourly.0 to $SPARSE_IMAGE_MOUNT/hourly.tmp
+    # step 2.5: cp -al $SPARSE_IMAGE_MOUNT/hourly.0 to $SPARSE_IMAGE_MOUNT/hourly.tmp
     if [ ! -d $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE ]; then
       logDebug "makeHourlySnapshot(): $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE does not exist; creating ...";
       logTrace "makeHourlySnapshot(): \ 
@@ -944,6 +958,10 @@ makeHourlySnapshot() {
   # step 5: update the hourly timestamp with current time
   $TOUCH $HOURLY_LAST;
   $ECHO "`$DATE -u +%s`" > $HOURLY_LAST;
+
+  # step 6: make the subvolume readable by everyone
+  # by default, new subvolumes are 700
+  $CHMOD 755 $SPARSE_IMAGE_MOUNT/.hourly.tmp;
 
   logInfo "makeHourlySnapshot(): Done.";
 }
