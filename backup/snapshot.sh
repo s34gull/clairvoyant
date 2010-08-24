@@ -646,6 +646,9 @@ mountSparseImageRW() {
   fi;
   logDebug "mountSparseImageRW(): Mount complete.";
 
+  logDebug "mountSparseImageRO(): Attempting chmod 700 $SPARSE_IMAGE_MOUNT/*";
+  $CHMOD 700 $SPARSE_IMAGE_MOUNT/*;
+
   logInfo "mountSparseImageRW(): Done.";
 }
 
@@ -660,6 +663,9 @@ mountSparseImageRO() {
   if [ ! -d $SPARSE_IMAGE_MOUNT ] ; then
       logError "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT does not exist; exiting.";
   fi;
+
+  logDebug "mountSparseImageRO(): Attempting chmod 755 $SPARSE_IMAGE_MOUNT/*";
+  $CHMOD 755 $SPARSE_IMAGE_MOUNT/*;
 
   logDebug "mountSparseImageRO(): Attempting remount...";
   logTrace "mountSparseImageRO(): $MOUNT -t $IMAGE_FS_TYPE -o remount,ro,$MOUNT_OPTIONS $MOUNT_DEV $SPARSE_IMAGE_MOUNT  >> $LOG_FILE 2>&1";
@@ -958,10 +964,6 @@ makeHourlySnapshot() {
   # step 5: update the hourly timestamp with current time
   $TOUCH $HOURLY_LAST;
   $ECHO "`$DATE -u +%s`" > $HOURLY_LAST;
-
-  # step 6: make the subvolume readable by everyone
-  # by default, new subvolumes are 700
-  $CHMOD 755 $SPARSE_IMAGE_MOUNT/.hourly.tmp;
 
   logInfo "makeHourlySnapshot(): Done.";
 }

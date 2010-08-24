@@ -163,6 +163,7 @@ makeHourlySnapshot() {
   fi;
 
   # step #0.5.a: btrfs subvolume snapshot $SPARSE_IMAGE_MOUNT/hourly.0 to $SPARSE_IMAGE_MOUNT/hourly.tmp
+  # don't forget to make the subvolume readable by everyone since by default, new subvolumes are 700
   if [ -d $SPARSE_IMAGE_MOUNT/hourly.0 ]; then
     logDebug "makeHourlySnapshot(): Performing copy of $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE to  $SPARSE_IMAGE_MOUNT/.hourly.tmp/ ...";
     logTrace "makeHourlySnapshot(): \
@@ -211,9 +212,6 @@ makeHourlySnapshot() {
   done;
   exec 0<&3;
 
-
-
-
   # step 4: update the mtime of hourly.0 to reflect the snapshot time
   logTrace "makeHourlySnapshot(): $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp";
   $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp;
@@ -221,10 +219,6 @@ makeHourlySnapshot() {
   # step 5: update the hourly timestamp with current time
   $TOUCH $HOURLY_LAST;
   $ECHO "`$DATE -u +%s`" > $HOURLY_LAST;
-
-  # step 6: make the subvolume readable by everyone
-  # by default, new subvolumes are 700
-  $CHMOD 755 $SPARSE_IMAGE_MOUNT/.hourly.tmp;
 
   logInfo "makeHourlySnapshot(): Done.";
 }
