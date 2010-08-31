@@ -223,9 +223,9 @@ mergeConfig() {
 
   # Append user mount options to the defaults
   logDebug "mergeUserDefined(): DEFAULT_MOUNT_OPTIONS=$DEFAULT_MOUNT_OPTIONS.";
-  if [ $MOUNT_OPTIONS ] ; then
-    logDebug "mergeUserDefined(): Using additional MOUNT_OPTIONS=$MOUNT_OPTIONS.";
-    MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS,$MOUNT_OPTIONS";
+  if [ $USER_MOUNT_OPTIONS ] ; then
+    logDebug "mergeUserDefined(): Using additional USER_MOUNT_OPTIONS=$USER_MOUNT_OPTIONS.";
+    MOUNT_OPTIONS="$DEFAULT_MOUNT_OPTIONS,$USER_MOUNT_OPTIONS";
   else
     MOUNT_OPTIONS=$DEFAULT_MOUNT_OPTIONS;
   fi;
