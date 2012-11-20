@@ -84,6 +84,7 @@ TEST_PROCESS="$PS -p";
 # ----------------------------------------------------------------------
 # Filesystem specific scripts
 SNAPSHOT_BTRFS=/usr/local/sbin/snapshot-btrfs.sh;
+SNAPSHOT_HFS=/usr/local/sbin/snapshot-hfs.sh;
 
 # These persistent configuration files are user created
 CONFIG_DIR=/usr/local/etc/snapshot
@@ -316,13 +317,13 @@ checkFields() {
     logError "checkFields(): IMAGE_FS_TYPE is not set; exiting.";
   fi;
 
-  if [ $SPARSE_IMAGE_MOUNT ] ; then
+  if [ "$SPARSE_IMAGE_MOUNT" ] ; then
     logDebug "checkFields(): SPARSE_IMAGE_MOUNT is set.";
   else
     logError "checkFields(): SPARSE_IMAGE_MOUNT is not set; exiting.";
   fi;
 
-  if [ $SPARSE_IMAGE_DIR ] ; then
+  if [ "$SPARSE_IMAGE_DIR" ] ; then
     logDebug "checkFields(): SPARSE_IMAGE_DIR is set.";
   else
     logError "checkFields(): SPARSE_IMAGE_DIR is not set; exiting.";
@@ -475,7 +476,7 @@ createSparseImage() {
       logError "createSparseImage(): Unable to create sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE; exiting.";
   fi;
   logDebug "createSparseImage(): File creation complete.";
-  $ECHO "$SPARSE_IMAGE_FILE" > $SPARSE_IMAGE_STOR;
+  `$ECHO "$SPARSE_IMAGE_FILE" > $SPARSE_IMAGE_STOR`;
 
   logDebug "createSparseImage(): Attaching $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE to loop...";
   logTrace "createSparseImage(): $LOSETUP -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
@@ -766,9 +767,9 @@ rotateHourlySnapshot() {
   do
     # step 1.1: shift the hourly snapshots(s) forward by one, if they exist
     OLD=$(($i-1));
-    if [ -d $SPARSE_IMAGE_MOUNT/hourly.$OLD ] ; then
+    if [ -d "$SPARSE_IMAGE_MOUNT/hourly.$OLD" ] ; then
       logTrace "rotateHourlySnapshot(): $MV $SPARSE_IMAGE_MOUNT/hourly.$OLD $SPARSE_IMAGE_MOUNT/hourly.$i >> $LOG_FILE 2>&1";
-      $MV $SPARSE_IMAGE_MOUNT/hourly.$OLD $SPARSE_IMAGE_MOUNT/hourly.$i >> $LOG_FILE 2>&1;
+      $MV "$SPARSE_IMAGE_MOUNT/hourly.$OLD" "$SPARSE_IMAGE_MOUNT/hourly.$i" >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
         logFatal "rotateHourlySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/hourly.$OLD; exiting.";
       fi;
@@ -777,10 +778,10 @@ rotateHourlySnapshot() {
   logDebug "rotateHourlySnapshot(): Hourly increment complete.";
 
   # step 1.2: rename the .hourly.tmp dir to hourly.0
-  if [ -d $SPARSE_IMAGE_MOUNT/.hourly.tmp ] ; then
+  if [ -d "$SPARSE_IMAGE_MOUNT/.hourly.tmp" ] ; then
     logDebug "rotateHourlySnapshot(): Renaming .hourly.tmp to hourly.0 ...";
     logTrace "rotateHourlySnapshot(): $MV $SPARSE_IMAGE_MOUNT/.hourly.tmp $SPARSE_IMAGE_MOUNT/hourly.0" >> $LOG_FILE 2>&1;
-    $MV $SPARSE_IMAGE_MOUNT/.hourly.tmp $SPARSE_IMAGE_MOUNT/hourly.0 >> $LOG_FILE 2>&1;
+    $MV "$SPARSE_IMAGE_MOUNT/.hourly.tmp" "$SPARSE_IMAGE_MOUNT/hourly.0" >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "rotateHourlySnapshot(): Unable to rename $SPARSE_IMAGE_MOUNT/.hourly.tmp to $SPARSE_IMAGE_MOUNT/.hourly.0; exiting.";
     fi;
@@ -807,9 +808,9 @@ rotateDailySnapshot() {
   do
     # step 2.1: shift the daily snapshots(s) forward by one, if they exist
     OLD=$(($i-1));
-    if [ -d $SPARSE_IMAGE_MOUNT/daily.$OLD ] ; then
+    if [ -d "$SPARSE_IMAGE_MOUNT/daily.$OLD" ] ; then
       logTrace "rotateDailySnapshot(): $MV $SPARSE_IMAGE_MOUNT/daily.$OLD $SPARSE_IMAGE_MOUNT/daily.$i >> $LOG_FILE 2>&1;";
-      $MV $SPARSE_IMAGE_MOUNT/daily.$OLD $SPARSE_IMAGE_MOUNT/daily.$i >> $LOG_FILE 2>&1;
+      $MV "$SPARSE_IMAGE_MOUNT/daily.$OLD" "$SPARSE_IMAGE_MOUNT/daily.$i" >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
         logFatal "rotateDailySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/daily.$OLD; exiting.";
       fi;
@@ -817,16 +818,16 @@ rotateDailySnapshot() {
   done
   logDebug "rotateDailySnapshot(): Daily increment complete.";
   # step 2.2: rename hourly.$HOURLY_SNAP_LIMIT into daily.0
-  if [ -d $SPARSE_IMAGE_MOUNT/hourly.$(($HOURLY_SNAP_LIMIT+1)) ] ; then
+  if [ -d "$SPARSE_IMAGE_MOUNT/hourly.$(($HOURLY_SNAP_LIMIT+1))" ] ; then
     logDebug "rotateDailySnapshot(): Renaming hourly.$(($HOURLY_SNAP_LIMIT+1)) to daily.0...";
     logTrace "rotateDailySnapshot(): $MV $SPARSE_IMAGE_MOUNT/hourly.$(($HOURLY_SNAP_LIMIT+1)) $SPARSE_IMAGE_MOUNT/daily.0 >> $LOG_FILE 2>&1;";
-    $MV $SPARSE_IMAGE_MOUNT/hourly.$(($HOURLY_SNAP_LIMIT+1)) $SPARSE_IMAGE_MOUNT/daily.0 >> $LOG_FILE 2>&1;
+    $MV "$SPARSE_IMAGE_MOUNT/hourly.$(($HOURLY_SNAP_LIMIT+1))" "$SPARSE_IMAGE_MOUNT/daily.0" >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "rotateDailySnapshot(): Unable to rename $SPARSE_IMAGE_MOUNT/hourly.$(($HOURLY_SNAP_LIMIT+1)); exiting.";
     fi;
     logDebug "rotateDailySnapshot(): Rename complete.";
-    $TOUCH $DAILY_LAST;
-    $ECHO "`$DATE -u +%s`" > $DAILY_LAST;
+    $TOUCH "$DAILY_LAST";
+    $ECHO "`$DATE -u +%s`" > "$DAILY_LAST";
   fi;
 
   logInfo "rotateDailySnapshot(): Done.";
@@ -846,9 +847,9 @@ rotateWeeklySnapshot() {
   do
     # step 3.1: shift the weekly snapshots(s) forward by one, if they exist
     OLD=$(($i-1));
-    if [ -d $SPARSE_IMAGE_MOUNT/weekly.$OLD ] ; then
+    if [ -d "$SPARSE_IMAGE_MOUNT/weekly.$OLD" ] ; then
       logTrace "rotateWeeklySnapshot(): $MV $SPARSE_IMAGE_MOUNT/weekly.$OLD $SPARSE_IMAGE_MOUNT/weekly.$i >> $LOG_FILE 2>&1;";
-      $MV $SPARSE_IMAGE_MOUNT/weekly.$OLD $SPARSE_IMAGE_MOUNT/weekly.$i >> $LOG_FILE 2>&1;
+      $MV "$SPARSE_IMAGE_MOUNT/weekly.$OLD" "$SPARSE_IMAGE_MOUNT/weekly.$i" >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
         logFatal "rotateWeeklySnapshot(): Unable to move $SPARSE_IMAGE_MOUNT/weekly.$OLD; exiting.";
       fi;
@@ -857,16 +858,16 @@ rotateWeeklySnapshot() {
   logDebug "rotateWeeklySnapshot(): Weekly increment complete";
 
   # step 3.2: rename daily.$DAILY_SNAP_LIMIT into weekly.0
-  if [ -d $SPARSE_IMAGE_MOUNT/daily.$(($DAILY_SNAP_LIMIT+1)) ] ; then
+  if [ -d "$SPARSE_IMAGE_MOUNT/daily.$(($DAILY_SNAP_LIMIT+1))" ] ; then
     logDebug "rotateWeeklySnapshot(): Renaming daily.$(($DAILY_SNAP_LIMIT+1)) to weekly.0...";
     logTrace "rotateWeeklySnapshot(): $MV $SPARSE_IMAGE_MOUNT/daily.$(($DAILY_SNAP_LIMIT+1)) $SPARSE_IMAGE_MOUNT/weekly.0 >> $LOG_FILE 2>&1;";
-    $MV $SPARSE_IMAGE_MOUNT/daily.$(($DAILY_SNAP_LIMIT+1)) $SPARSE_IMAGE_MOUNT/weekly.0 >> $LOG_FILE 2>&1;
+    $MV "$SPARSE_IMAGE_MOUNT/daily.$(($DAILY_SNAP_LIMIT+1))" "$SPARSE_IMAGE_MOUNT/weekly.0" >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logFatal "rotateWeeklySnapshot(): Unable to rename $SPARSE_IMAGE_MOUNT/daily.$(($DAILY_SNAP_LIMIT+1)); exiting.";
     fi;
     logDebug "rotateWeeklySnapshot(): Rename complete.";
-    $TOUCH $WEEKLY_LAST;
-    $ECHO "`$DATE -u +%s`" > $WEEKLY_LAST;
+    $TOUCH "$WEEKLY_LAST";
+    $ECHO "`$DATE -u +%s`" > "$WEEKLY_LAST";
   fi;
 
   logInfo "rotateWeeklySnapshot(): Done.";
@@ -889,7 +890,7 @@ makeHourlySnapshot() {
   logInfo "makeHourlySnapshot(): Beginning makeHourlySnapshot...";
 
   # step 1: define rsync options
-  RSYNC_OPTS="--archive --sparse --partial --delete --delete-excluded";
+  RSYNC_OPTS="--archive --xattrs --acls --sparse --partial --delete --delete-excluded";
 
   if [ $LOG_LEVEL -ge $LOG_INFO ] ; then
     RSYNC_OPTS="--stats $RSYNC_OPTS";
@@ -905,16 +906,16 @@ makeHourlySnapshot() {
 
   # step 1.5: create the $SPARSE_IMAGE_MOUNT/.hourly.tmp directory 
   # and make it read/write for root only.
-  if [ ! -d $SPARSE_IMAGE_MOUNT/.hourly.tmp ]; then
+  if [ ! -d "$SPARSE_IMAGE_MOUNT/.hourly.tmp" ]; then
     logDebug "makeHourlySnapshot(): $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE does not exist; creating ...";
     logTrace "makeHourlySnapshot(): \ 
-      $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1;";
-    $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp >> $LOG_FILE 2>&1;
+      $MKDIR -p "$SPARSE_IMAGE_MOUNT/.hourly.tmp" >> $LOG_FILE 2>&1;";
+    $MKDIR -p "$SPARSE_IMAGE_MOUNT/.hourly.tmp" >> $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logError "makeHourlySnapshot(): Unable to create $SPARSE_IMAGE_MOUNT/.hourly.tmp; exiting.";
     fi;
   fi;
-  $CHMOD 700 $SPARSE_IMAGE_MOUNT/.hourly.tmp; 
+  $CHMOD 700 "$SPARSE_IMAGE_MOUNT/.hourly.tmp"; 
 
   # Perform all $SOURCE based logic in this block
   exec 3<&0;
@@ -924,17 +925,17 @@ makeHourlySnapshot() {
     logInfo "makeHourlySnapshot(): Taking snapshot of /$SOURCE...";
 
     # step 2.5: cp -al $SPARSE_IMAGE_MOUNT/hourly.0 to $SPARSE_IMAGE_MOUNT/hourly.tmp
-    if [ ! -d $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE ]; then
+    if [ ! -d "$SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE" ]; then
       logDebug "makeHourlySnapshot(): $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE does not exist; creating ...";
       logTrace "makeHourlySnapshot(): \ 
         $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1;";
-      $MKDIR -p $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE >> $LOG_FILE 2>&1;
+      $MKDIR -p "$SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE" >> $LOG_FILE 2>&1;
       if [ $? -ne 0 ] ; then
         logError "makeHourlySnapshot(): Unable to create $SPARSE_IMAGE_MOUNT/.hourly.tmp; exiting.";
       fi;
     fi;
 
-    if [ -d $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE ]; then
+    if [ -d "$SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE" ]; then
       logDebug "makeHourlySnapshot(): Performing copy of $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE to  $SPARSE_IMAGE_MOUNT/.hourly.tmp/ ...";
       logTrace "makeHourlySnapshot(): \
         $CP -al $SPARSE_IMAGE_MOUNT/hourly.0/$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/../ >> $LOG_FILE 2>&1";
@@ -954,7 +955,7 @@ makeHourlySnapshot() {
     logDebug "makeHourlySnapshot(): Performing rsync...";
     logTrace "makeHourlySnapshot(): \
       $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/ >> $LOG_FILE 2>&1";
-    $RSYNC $RSYNC_OPTS /$SOURCE/ $SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/ >>  $LOG_FILE 2>&1;
+    $RSYNC $RSYNC_OPTS "/$SOURCE/" "$SPARSE_IMAGE_MOUNT/.hourly.tmp/$SOURCE/" >>  $LOG_FILE 2>&1;
     if [ $? -ne 0 ] ; then
       logWarn "makeHourlySnapshot(): rsync encountered an error; continuing ...";
     fi;
@@ -966,7 +967,7 @@ makeHourlySnapshot() {
 
   # step 4: update the mtime of hourly.0 to reflect the snapshot time
   logTrace "makeHourlySnapshot(): $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp";
-  $TOUCH $SPARSE_IMAGE_MOUNT/.hourly.tmp;
+  $TOUCH "$SPARSE_IMAGE_MOUNT/.hourly.tmp";
   
   # step 5: update the hourly timestamp with current time
   $TOUCH $HOURLY_LAST;
@@ -995,24 +996,30 @@ setup() {
   if [ "$IMAGE_FS_TYPE" == "btrfs" ] ; then
     logWarn "setup(): Using ***EXPERIMENTAL*** filesystem, btrfs."
     . $SNAPSHOT_BTRFS;
+  elif [ "$IMAGE_FS_TYPE" == "hfs" ] ; then
+    logWarn "setup(): Using HFS+ filesystem."
+    . $SNAPSHOT_HFS;
   fi;
 
-  if [ $SPARSE_IMAGE_STOR -a -f $SPARSE_IMAGE_STOR -a -s $SPARSE_IMAGE_STOR ] ; then
+  if [ "$SPARSE_IMAGE_STOR" -a -f "$SPARSE_IMAGE_STOR" -a -s "$SPARSE_IMAGE_STOR" ] ; then
     SPARSE_IMAGE_FILE=$($CAT $SPARSE_IMAGE_STOR);
     logDebug "setup(): $SPARSE_IMAGE_STOR defines $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE for storage.";
   else
-    logDebug "setup(): No sparse image file defined; creating new...";
+    logDebug "setup(): No sparse image file defined ($SPARSE_IMAGE_STOR); creating new...";
     createSparseImage;
   fi;
 
-  if [ $SPARSE_IMAGE_DIR -a -d $SPARSE_IMAGE_DIR ] ; then
+  if [ "$SPARSE_IMAGE_DIR" -a -d "$SPARSE_IMAGE_DIR" ] ; then
     logDebug "setup(): Sparse image directory $SPARSE_IMAGE_DIR exists.";
   else
     logError "setup(): Sparse image directory $SPARSE_IMAGE_DIR not found (is its device mounted?); exiting.";
   fi;
 
-  if [ $SPARSE_IMAGE_DIR -a $SPARSE_IMAGE_FILE -a -f $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE -a -s $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE ] ; then
+  # on Macs, sparsebundle is a directory so need -f OR -d "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE"
+  if [ "$SPARSE_IMAGE_DIR" -a "$SPARSE_IMAGE_FILE" -a -f "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" -a -s "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" ] ; then
     logDebug "setup(): Sparse image file $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE exists.";
+  elif [ "$SPARSE_IMAGE_DIR" -a "$SPARSE_IMAGE_FILE" -a -d "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" ] ; then
+    logDebug "setup(): Sparsebundle dir $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE exists.";
   else
     logError "setup(): Sparse image file  $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE not found - verify contents of $SPARSE_IMAGE_STOR and remove that file if no longer valid; exiting.";
   fi;
