@@ -142,13 +142,6 @@ mountSparseImageRW() {
       `$HDUTIL detach "/Volumes/$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`;
   fi;
 
-  if [ $PERFORM_WEEKLY_ROTATE = yes ] ; then
-    logInfo "mountSparseImageRW(): Performing weekly file system check...";
-    filesystemCheck;
-  else
-    logInfo "mountSparseImageRW(): Skipping weekly file system check...";
-  fi
-
   logDebug "mountSparseImageRW(): Attempting remount...";
   if [ $ENCRYPT = yes ] ; then
     logTrace "mountSparseImageRW(): $HDIUTIL attach -stdinpass $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
@@ -157,6 +150,13 @@ mountSparseImageRW() {
     logTrace "mountSparseImageRW(): $HDIUTIL attach $SPARSE_IMAGE_MOUNT";
     `$HDIUTIL attach "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
   fi;
+
+  if [ $PERFORM_WEEKLY_ROTATE = yes ] ; then
+    logInfo "mountSparseImageRW(): Performing weekly file system check...";
+    filesystemCheck;
+  else
+    logInfo "mountSparseImageRW(): Skipping weekly file system check...";
+  fi
 
   logDebug "mountSparseImageRW(): Mount complete.";
 
@@ -169,31 +169,21 @@ mountSparseImageRW() {
 
 #-----------------------------------------------------------------------
 # mountSparseImageRO()
-#    Attempt to (re)mount the sparse image to its mount point as 
-#    read-only.
+#    On the Mac, just detach the disk image, to be consistent with 
+# Time Machine.
 #-----------------------------------------------------------------------
 mountSparseImageRO() {
   setupLoopDevice;
-  logInfo "mountSparseImageRO(): Re-mounting $MOUNT_DEV to $SPARSE_IMAGE_MOUNT in readonly...";
-  if [ -d "/Volumes/$SPARSE_IMAGE_MOUNT" ] ; then
-      logError "mountSparseImageRO(): Mount point /Volumes/$SPARSE_IMAGE_MOUNT exists; unmounting.";
-      `$HDUTIL detach "/Volumes/$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`;
-  fi;
 
   logDebug "mountSparseImageRO(): Attempting chmod 755 $SPARSE_IMAGE_MOUNT/*";
   $CHMOD 755 $SPARSE_IMAGE_MOUNT/*;
   $CHFLAGS hidden $SPARSE_IMAGE_MOUNT;
 
-  logDebug "mountSparseImageRO(): Attempting remount...";
-  if [ $ENCRYPT = yes ] ; then
-    logTrace "mountSparseImageRO(): $HDIUTIL attach -stdinpass -readonly $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
-    `$ECHO $PASSPHRASE | $HDIUTIL attach -stdinpass -readonly "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
-  else 
-    logTrace "mountSparseImageRO(): $HDIUTIL attach -readonly $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
-    `$HDIUTIL attach -readonly "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
+  logInfo "mountSparseImageRO(): Re-mounting $MOUNT_DEV to $SPARSE_IMAGE_MOUNT in readonly...";
+  if [ -d "/Volumes/$SPARSE_IMAGE_MOUNT" ] ; then
+      logError "mountSparseImageRO(): Mount point /Volumes/$SPARSE_IMAGE_MOUNT exists; unmounting.";
+      `$HDUTIL detach "/Volumes/$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`;
   fi;
-
-  logDebug "mountSparseImageRO(): Mount complete.";
 
   logInfo "mountSparseImageRO(): Done.";
 }
