@@ -85,6 +85,7 @@ TEST_PROCESS="$PS -p";
 # Filesystem specific scripts
 SNAPSHOT_BTRFS=/usr/local/sbin/snapshot-btrfs.sh;
 SNAPSHOT_HFS=/usr/local/sbin/snapshot-hfs.sh;
+SNAPSHOT_MACZFS=/usr/local/sbin/snapshot-maczfs.sh;
 
 # These persistent configuration files are user created
 CONFIG_DIR=/usr/local/etc/snapshot
@@ -999,6 +1000,9 @@ setup() {
   elif [ "$IMAGE_FS_TYPE" == "hfs" ] ; then
     logWarn "setup(): Using HFS+ filesystem."
     . $SNAPSHOT_HFS;
+  elif [ "$IMAGE_FS_TYPE" == maczfs ] ; then
+    logWarn "setup(): Using ZFS filesystem."
+    . $SNAPSHOT_MACZFS;
   fi;
 
   if [ "$SPARSE_IMAGE_STOR" -a -f "$SPARSE_IMAGE_STOR" -a -s "$SPARSE_IMAGE_STOR" ] ; then
