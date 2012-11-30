@@ -992,7 +992,6 @@ setup() {
   mergeConfig;
   checkUser;
   checkFields;
-  getLock;
 
   if [ "$IMAGE_FS_TYPE" == "btrfs" ] ; then
     logWarn "setup(): Using ***EXPERIMENTAL*** filesystem, btrfs."
@@ -1004,6 +1003,8 @@ setup() {
     logWarn "setup(): Using ZFS filesystem."
     . $SNAPSHOT_MACZFS;
   fi;
+
+  getLock;
 
   if [ "$SPARSE_IMAGE_STOR" -a -f "$SPARSE_IMAGE_STOR" -a -s "$SPARSE_IMAGE_STOR" ] ; then
     SPARSE_IMAGE_FILE=$($CAT $SPARSE_IMAGE_STOR);
