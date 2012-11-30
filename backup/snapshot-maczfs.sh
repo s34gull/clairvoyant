@@ -47,6 +47,8 @@ SED=/usr/bin/sed
 TOUCH=/usr/bin/touch
 
 CHFLAGS=/usr/bin/chflags
+HDIUTIL=/usr/bin/hdiutil;
+DISKUTIL=/usr/sbin/diskutil;
 ZPOOL=/usr/sbin/zpool
 ZFS=/usr/sbin/zfs
 
@@ -173,7 +175,7 @@ mountSparseImageRW() {
 
   logTrace "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
   ZPOOL_NAME="`echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-`"
-  $ZFS set readonly=false $ZPOOL_NAME
+  $ZFS set readonly=off $ZPOOL_NAME
 
   # exit code 1 means already mounted
   $ZFS mount $ZPOOL_NAME
@@ -203,7 +205,7 @@ mountSparseImageRO() {
   if [ -d "/Volumes/$SPARSE_IMAGE_MOUNT" ] ; then
       logTrace "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
       ZPOOL_NAME=`echo $SPARSE_IMAGE_MOUNT | CUT -d '/' -f3-`
-      $ZFS set readonly=true $ZPOOL_NAME
+      $ZFS set readonly=on $ZPOOL_NAME
 
       # exit code 1 means already mounted
       $ZFS unmount $ZPOOL_NAME
