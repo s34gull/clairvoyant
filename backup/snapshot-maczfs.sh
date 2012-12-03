@@ -217,10 +217,10 @@ mountSparseImageRO() {
         logWarn "mountSparseImageRO(): '$ZFS unmount' reported errors on $ZPOOL_NAME; exiting...";
       fi;
 
-      logError "mountSparseImageRO(): Mount point /Volumes/$SPARSE_IMAGE_MOUNT exists; unmounting.";
-      `$DISKUTIL unmount "/Volumes/$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`
+      logError "mountSparseImageRO(): Mount point /Volumes/$SPARSE_IMAGE_MOUNT exists; detaching.";
+      `$HDIUTIL detach "/Volumes/$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`
       if [ $? -ne 0 ] ; then
-        logWarn "mountSparseImageRW(): '$DISKUTIL unmount' reported errors on $ZPOOL_NAME; exiting...";
+        logWarn "mountSparseImageRW(): '$HDIUTIL unmount' reported errors on $ZPOOL_NAME; exiting...";
       fi;
   fi;
 
