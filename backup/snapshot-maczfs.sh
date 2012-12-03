@@ -175,16 +175,20 @@ mountSparseImageRW() {
 
   logTrace "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
   ZPOOL_NAME="`echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-`"
-  $ZFS set readonly=off $ZPOOL_NAME
+  `$ZFS set readonly=off $ZPOOL_NAME`
 
   # exit code 1 means already mounted
-  $ZFS mount $ZPOOL_NAME
+  `$ZFS unmount $ZPOOL_NAME`
+  `$ZFS mount $ZPOOL_NAME`
+  if [ $? -ne 0 ] ; then
+      logFatal "mountSparseImageRW(): '$ZFS mount' reported errors on $ZPOOL_NAME; check $LOG_FILE and manually repair this voume; exiting...";
+  fi;
 
   logDebug "mountSparseImageRW(): Mount complete.";
 
   logDebug "mountSparseImageRW(): Attempting chmod 700 $SPARSE_IMAGE_MOUNT/*";
-  $CHMOD 700 $SPARSE_IMAGE_MOUNT/*;
-  $CHFLAGS nohidden $SPARSE_IMAGE_MOUNT;
+  `$CHMOD 700 $SPARSE_IMAGE_MOUNT/*`
+  `$CHFLAGS nohidden $SPARSE_IMAGE_MOUNT`
 
   logInfo "mountSparseImageRW(): Done.";
 }
@@ -205,13 +209,19 @@ mountSparseImageRO() {
   if [ -d "/Volumes/$SPARSE_IMAGE_MOUNT" ] ; then
       logTrace "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
       ZPOOL_NAME=`echo $SPARSE_IMAGE_MOUNT | CUT -d '/' -f3-`
-      $ZFS set readonly=on $ZPOOL_NAME
+      `$ZFS set readonly=on $ZPOOL_NAME`
 
       # exit code 1 means already mounted
-      $ZFS unmount $ZPOOL_NAME
+      `$ZFS unmount $ZPOOL_NAME`
+      if [ $? -ne 0 ] ; then
+        logError "mountSparseImageRW(): '$ZFS unmount' reported errors on $ZPOOL_NAME; exiting...";
+      fi;
 
       logError "mountSparseImageRO(): Mount point /Volumes/$SPARSE_IMAGE_MOUNT exists; unmounting.";
-      `$HDUTIL detach "/Volumes/$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`;
+      `$DISKUTIL unmount "/Volumes/$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`
+      if [ $? -ne 0 ] ; then
+        logError "mountSparseImageRW(): '$DISKUTIL unmount' reported errors on $ZPOOL_NAME; exiting...";
+      fi;
   fi;
 
   logInfo "mountSparseImageRO(): Done.";
