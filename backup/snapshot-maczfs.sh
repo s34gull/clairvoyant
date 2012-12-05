@@ -42,6 +42,7 @@
 # Include external commands here for portability
 # ----------------------------------------------------------------------
 CP=/opt/local/bin/gcp
+GREP=/usr/bin/grep
 RSYNC=/opt/local/bin/rsync
 SED=/usr/bin/sed
 TOUCH=/usr/bin/touch
@@ -78,14 +79,14 @@ NOTIFY=/bin/echo;
 createSparseImage() {
   logInfo "createSparseImage(): Creating new sparse image file for snapshots...";
 
-  logTrace "createSparseImage(): GUID=$HOSTNAME$RANDOM$DATE -u +%s";
+  logDebug "createSparseImage(): GUID=$HOSTNAME$RANDOM$DATE -u +%s";
   #GUID="`$HOSTNAME`$RANDOM`$DATE -u +%s`";
   GUID="$RANDOM`$DATE -u +%s`";
 
-  #logTrace "createSparseImage(): GUID=$ECHO $GUID | $HASH";
+  #logDebug "createSparseImage(): GUID=$ECHO $GUID | $HASH";
   #GUID=`$ECHO $GUID | $HASH`;
 
-  #logTrace "createSparseImage(): GUID=$ECHO $GUID | $CUT -d' ' -f1";
+  #logDebug "createSparseImage(): GUID=$ECHO $GUID | $CUT -d' ' -f1";
   #GUID=`$ECHO $GUID | $CUT -d' ' -f1`;
 
   SPARSE_IMAGE_FILE=`$HOSTNAME`.$GUID.sparsebundle;
@@ -97,11 +98,11 @@ createSparseImage() {
   # successful creation of a filesystem on newly minted disk image
   if [ $ENCRYPT = yes ] ; then
     logDebug "createSparseImage(): Enryption requested; using encrypted DMG."
-    logTrace "createSparseImage(): $HDIUTIL create -stdinpass -encryption AES-256 -type SPARSEBUNDLE -size $IMAGE_SIZE -volname Snapshot Volume -fs Journaled HFS+ $SPARSE_IMAGE_DIR/SPARSE_IMAGE_FILE";
+    logDebug "createSparseImage(): $HDIUTIL create -stdinpass -encryption AES-256 -type SPARSEBUNDLE -size $IMAGE_SIZE -volname Snapshot Volume -fs Journaled HFS+ $SPARSE_IMAGE_DIR/SPARSE_IMAGE_FILE";
     $ECHO $PASSPHRASE | $HDIUTIL create -verbose -stdinpass -encryption AES-256 -type SPARSEBUNDLE -size $IMAGE_SIZE -volname "Snapshot_Volume" -fs Journaled\ HFS+ -attach "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
   else
     logDebug "createSparseImage(): Enryption NOT requested; using standard DMG."
-    logTrace "createSparseImage(): $HDIUTIL create -type SPARSEBUNDLE -size $IMAGE_SIZE -volname Snapshot Volume -fs Journaled HFS+ $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
+    logDebug "createSparseImage(): $HDIUTIL create -type SPARSEBUNDLE -size $IMAGE_SIZE -volname Snapshot Volume -fs Journaled HFS+ $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
     $HDIUTIL create -verbose -type SPARSEBUNDLE -size $IMAGE_SIZE -volname "Snapshot_Volume" -fs Journaled\ HFS+ -attach "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
   fi;
 
@@ -132,11 +133,11 @@ setupLoopDevice() {
 filesystemCheck() {
   logInfo "filesystemCheck(): Starting file system check (repairs will NOT be attempted)...";
 
-  logTrace "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
+  logDebug "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
   ZPOOL_NAME="`echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3 -`"
 
   logDebug "filesystemCheck(): Checking file system $SPARSE_IMAGE_MOUNT";
-  logTrace "filesystemCheck(): $ZPOOL scrub $ZPOOL_NAME";
+  logDebug "filesystemCheck(): $ZPOOL scrub $ZPOOL_NAME";
   `$ZPOOL scrub "$ZPOOL_NAME" >> $LOG_FILE 2>&1`;
   if [ $? -ne 0 ] ; then
       logFatal "filesystemCheck(): $ZPOOL scrub reported errors on $ZPOOL_NAME; check $LOG_FILE and manually repair this voume; exiting...";
@@ -152,17 +153,35 @@ filesystemCheck() {
 mountSparseImageRW() {
   setupLoopDevice;
   logInfo "mountSparseImageRW(): Re-mounting $MOUNT_DEV to $SPARSE_IMAGE_MOUNT in readwrite...";
-  if [ -d "/Volumes/$SPARSE_IMAGE_MOUNT" ] ; then
-    # If mounted, do nothing.
-    logDebug "ZFS volume mounted; nothing to do";
+  if [ -d "$SPARSE_IMAGE_MOUNT" ] ; then
+    TYPE=`$DISKUTIL info $SPARSE_IMAGE_MOUNT | $GREP "Type (Bundle)" | $CUT -d ':' -f2- | $SED -e 's/ *//g'`
+    if [[ "$TYPE" == "zfs" ]] ; then
+      logDebug "ZFS volume mounted; nothing to do";
+    else
+      logFatal "$SPARSE_IMAGE_MOUNT mounted, but not ZFS volume (found $TYPE); exiting..."
+    fi;
   else
       logDebug "mountSparseImageRW(): Attempting mount...";
       if [ $ENCRYPT = yes ] ; then
-        logTrace "mountSparseImageRW(): $HDIUTIL attach -stdinpass $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
+        logDebug "mountSparseImageRW(): $HDIUTIL attach -stdinpass $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
         `$ECHO $PASSPHRASE | $HDIUTIL attach -stdinpass "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
+        if [ $? -ne 0 ] ; then
+          sleep 10;
+          `$ECHO $PASSPHRASE | $HDIUTIL attach -stdinpass "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
+          if [ $? -ne 0 ] ; then
+            logFatal "mountSparseImageRW(): $HDIUTIL failed; exiting."
+          fi;
+        fi;
       else 
-        logTrace "mountSparseImageRW(): $HDIUTIL attach $SPARSE_IMAGE_MOUNT";
+        logDebug "mountSparseImageRW(): $HDIUTIL attach $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
         `$HDIUTIL attach "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
+        if [ $? -ne 0 ] ; then
+          sleep 10;
+          `$HDIUTIL attach "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
+          if [ $? -ne 0 ] ; then
+            logFatal "mountSparseImageRW(): $HDIUTIL failed; exiting."
+          fi;
+        fi;
       fi;
   fi;
 
@@ -173,12 +192,15 @@ mountSparseImageRW() {
     logInfo "mountSparseImageRW(): Skipping weekly file system check...";
   fi
 
-  logTrace "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
+  logDebug "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
   ZPOOL_NAME="`echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-`"
+  logDebug "$ZFS set readonly=off $ZPOOL_NAME"
   `$ZFS set readonly=off $ZPOOL_NAME`
 
   # exit code 1 means already mounted
+  logDebug "$ZFS unmount $ZPOOL_NAME"
   `$ZFS unmount $ZPOOL_NAME`
+  logDebug "$ZFS mount $ZPOOL_NAME"
   `$ZFS mount $ZPOOL_NAME`
   if [ $? -ne 0 ] ; then
       logFatal "mountSparseImageRW(): '$ZFS mount' reported errors on $ZPOOL_NAME; check $LOG_FILE and manually repair this voume; exiting...";
@@ -206,21 +228,16 @@ mountSparseImageRO() {
   $CHFLAGS hidden $SPARSE_IMAGE_MOUNT;
 
   logInfo "mountSparseImageRO(): Unmounting $SPARSE_IMAGE_MOUNT ...";
-  if [ -d "/Volumes/$SPARSE_IMAGE_MOUNT" ] ; then
-      logTrace "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
-      ZPOOL_NAME=`echo $SPARSE_IMAGE_MOUNT | CUT -d '/' -f3-`
+  if [ -d "$SPARSE_IMAGE_MOUNT" ] ; then
+      logDebug "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
+      ZPOOL_NAME="`echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-`"
+      logDebug "$ZFS set readonly=on $ZPOOL_NAME"
       `$ZFS set readonly=on $ZPOOL_NAME`
 
-      # exit code 1 means already mounted
-      `$ZFS unmount $ZPOOL_NAME`
+      logInfo "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT exists; detaching.";
+      `$HDIUTIL detach "$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`
       if [ $? -ne 0 ] ; then
-        logWarn "mountSparseImageRO(): '$ZFS unmount' reported errors on $ZPOOL_NAME; exiting...";
-      fi;
-
-      logError "mountSparseImageRO(): Mount point /Volumes/$SPARSE_IMAGE_MOUNT exists; detaching.";
-      `$HDIUTIL detach "/Volumes/$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`
-      if [ $? -ne 0 ] ; then
-        logWarn "mountSparseImageRW(): '$HDIUTIL unmount' reported errors on $ZPOOL_NAME; exiting...";
+        logWarn "mountSparseImageRO(): '$HDIUTIL detach' reported errors on $ZPOOL_NAME; exiting...";
       fi;
   fi;
 
