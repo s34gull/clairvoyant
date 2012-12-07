@@ -137,12 +137,13 @@ filesystemCheck() {
   ZPOOL_NAME="`echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3 -`"
 
   logDebug "filesystemCheck(): Checking file system $SPARSE_IMAGE_MOUNT";
-  logDebug "filesystemCheck(): $ZPOOL scrub $ZPOOL_NAME";
-  `$ZPOOL scrub "$ZPOOL_NAME" >> $LOG_FILE 2>&1`;
-  if [ $? -ne 0 ] ; then
-      logFatal "filesystemCheck(): $ZPOOL scrub reported errors on $ZPOOL_NAME; check $LOG_FILE and manually repair this voume; exiting...";
-  fi;
-  logInfo "filesystemCheck(): File system check complete; $ZPOOL_NAME is clean.";
+  logWarn "filesystemCheck(): A week has passed; a scrub is recommended.";
+  #logDebug "filesystemCheck(): $ZPOOL scrub $ZPOOL_NAME";
+  #`$ZPOOL scrub "$ZPOOL_NAME" >> $LOG_FILE 2>&1`;
+  #if [ $? -ne 0 ] ; then
+  #    logFatal "filesystemCheck(): $ZPOOL scrub reported errors on $ZPOOL_NAME; check $LOG_FILE and manually repair this voume; exiting...";
+  #fi;
+  logInfo "filesystemCheck(): File system check complete.";
 }
 
 #-----------------------------------------------------------------------
