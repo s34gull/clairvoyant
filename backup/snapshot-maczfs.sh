@@ -198,9 +198,12 @@ mountSparseImageRW() {
   logDebug "$ZFS set readonly=off $ZPOOL_NAME"
   `$ZFS set readonly=off $ZPOOL_NAME`
 
-  # exit code 1 means already mounted
+  # cannot determine cause for mount failure from exit code
+  # all failures, including already mounted, are '1'
   logDebug "$ZFS unmount $ZPOOL_NAME"
+  `$ZPOOL scrub -s $ZPOOL_NAME`
   `$ZFS unmount $ZPOOL_NAME`
+
   logDebug "$ZFS mount $ZPOOL_NAME"
   `$ZFS mount $ZPOOL_NAME`
   if [ $? -ne 0 ] ; then
@@ -236,6 +239,7 @@ mountSparseImageRO() {
       `$ZFS set readonly=on $ZPOOL_NAME`
 
       logInfo "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT exists; detaching.";
+      `$ZPOOL scrub -s $ZPOOL_NAME`
       `$HDIUTIL detach "$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`
       if [ $? -ne 0 ] ; then
         logWarn "mountSparseImageRO(): '$HDIUTIL detach' reported errors on $ZPOOL_NAME; exiting...";
