@@ -72,6 +72,7 @@ NOTIFY=/bin/echo;
 scrub_check() {
   logDebug "scrub_check(): $ZPOOL status $1 | $GREP -i scrub in progress | $WC -l"
   SCRUB_STATUS=`$ZPOOL status $1 | $GREP -i "scrub in progress" | $WC -l`
+  logDebug "scrub_check(): SCRUB_STATUS=$SCRUB_STATUS"
 }
 
 #-----------------------------------------------------------------------
@@ -172,9 +173,7 @@ mountSparseImageRW() {
         if [ $? -ne 0 ] ; then
           $SLEEP 10;
           `$ECHO $PASSPHRASE | $HDIUTIL attach -stdinpass "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
-          if [ $? -ne 0 ] ; then
-            logFatal "mountSparseImageRW(): $HDIUTIL failed; exiting."
-          fi;
+
         fi;
       else 
         logDebug "mountSparseImageRW(): $HDIUTIL attach $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
@@ -182,9 +181,7 @@ mountSparseImageRW() {
         if [ $? -ne 0 ] ; then
           $SLEEP 10;
           `$HDIUTIL attach "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
-          if [ $? -ne 0 ] ; then
-            logFatal "mountSparseImageRW(): $HDIUTIL failed; exiting."
-          fi;
+
         fi;
       fi;
   fi;
@@ -202,24 +199,34 @@ mountSparseImageRW() {
   `$ZFS set readonly=off $ZPOOL_NAME`
 
   scrub_check "$ZPOOL_NAME"
-  if [[ $SCRUB_STATUS == 0 ]] ; then
+  echo $SCRUB_STATUS
+  if [ $SCRUB_STATUS = 0 ] ; then
     # cannot determine cause for mount failure from exit code
     # all failures, including already mounted, are '1'
-    logDebug "$ZFS scrub -s $ZPOOL_NAME"
-    `$ZPOOL scrub -s $ZPOOL_NAME`
 
-    logDebug "$ZFS export $ZPOOL_NAME"
-    `$ZPOOL export $ZPOOL_NAME`
+    #logDebug "$ZPOOL export $ZPOOL_NAME"
+    #`$ZPOOL export $ZPOOL_NAME`
 
-    logDebug "$ZFS import $ZPOOL_NAME"
+    logDebug "$ZPOOL import $ZPOOL_NAME"
     `$ZPOOL import $ZPOOL_NAME`
-    if [ $? -ne 0 ] ; then
-        logFatal "mountSparseImageRW(): '$ZFS mount' reported errors on $ZPOOL_NAME; check $LOG_FILE and manually repair this voume; exiting...";
+
+    logDebug "$ZFS mount $ZPOOL_NAME"
+    `$ZFS mount $ZPOOL_NAME`
+
+    if [ -d "$SPARSE_IMAGE_MOUNT" ] ; then
+      TYPE=`$DISKUTIL info $SPARSE_IMAGE_MOUNT | $GREP "Type (Bundle)" | $CUT -d ':' -f2- | $SED -e 's/ *//g'`
+      if [[ "$TYPE" == "zfs" ]] ; then
+        logDebug "ZFS volume mounted; nothing to do";
+      else
+        logFatal "$SPARSE_IMAGE_MOUNT mounted, but not ZFS volume (found $TYPE); exiting..."
+      fi;
+    else
+        logError "$SPARSE_IMAGE_MOUNT not mounted; exiting..."
     fi;
 
     logDebug "mountSparseImageRW(): Mount complete.";
   else
-    logDebug "mountSparseImageRW(): Detected scrub - skipping unmount/mount sequence";
+    logError "mountSparseImageRW(): Detected scrub (or failed to detect scrub) - exiting";
   fi
 
   logDebug "mountSparseImageRW(): Attempting chmod 700 $SPARSE_IMAGE_MOUNT/*";
@@ -246,17 +253,15 @@ mountSparseImageRO() {
 
   scrub_check "$ZPOOL_NAME"
 
-  if [[ -d "$SPARSE_IMAGE_MOUNT" && $SCRUB_STATUS == 0 ]] ; then
+  if [ $SCRUB_STATUS = 0 ] ; then
     logInfo "mountSparseImageRO(): Unmounting $SPARSE_IMAGE_MOUNT ...";
     logDebug "$ZFS set readonly=on $ZPOOL_NAME"
     `$ZFS set readonly=on $ZPOOL_NAME`
 
     logInfo "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT exists; detaching.";
-    logDebug "$ZFS scrub -s $ZPOOL_NAME"
-    `$ZPOOL scrub -s $ZPOOL_NAME`
 
-    logDebug "$ZFS export $ZPOOL_NAME"
-    `$ZPOOL export "$ZPOOL_NAME" >> $LOG_FILE 2>&1`
+    #logDebug "$ZFS export $ZPOOL_NAME"
+    #`$ZPOOL export "$ZPOOL_NAME" >> $LOG_FILE 2>&1`
     if [ $? -ne 0 ] ; then
       logWarn "mountSparseImageRO(): '$HDIUTIL detach' reported errors on $ZPOOL_NAME; exiting...";
     fi;
