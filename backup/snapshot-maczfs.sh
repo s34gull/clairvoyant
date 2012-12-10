@@ -45,6 +45,7 @@ CP=/opt/local/bin/gcp
 GREP=/usr/bin/grep
 RSYNC=/opt/local/bin/rsync
 SED=/usr/bin/sed
+SLEEP=/bin/sleep
 TOUCH=/usr/bin/touch
 
 CHFLAGS=/usr/bin/chflags
@@ -68,6 +69,10 @@ NOTIFY=/bin/echo;
 #-----------------------------------------------------------------------
 #------------- FUNCTIONS -----------------------------------------------
 #-----------------------------------------------------------------------
+scrub_check() {
+  logDebug "scrub_check(): $ZPOOL status $1 | $GREP -i scrub in progress | $WC -l"
+  SCRUB_STATUS=`$ZPOOL status $1 | $GREP -i "scrub in progress" | $WC -l`
+}
 
 #-----------------------------------------------------------------------
 # createSparseImage()
@@ -140,10 +145,8 @@ filesystemCheck() {
   logWarn "filesystemCheck(): A week has passed; a scrub is recommended.";
   #logDebug "filesystemCheck(): $ZPOOL scrub $ZPOOL_NAME";
   #`$ZPOOL scrub "$ZPOOL_NAME" >> $LOG_FILE 2>&1`;
-  #if [ $? -ne 0 ] ; then
-  #    logFatal "filesystemCheck(): $ZPOOL scrub reported errors on $ZPOOL_NAME; check $LOG_FILE and manually repair this voume; exiting...";
-  #fi;
-  logInfo "filesystemCheck(): File system check complete.";
+
+  logInfo "filesystemCheck(): Returning.";
 }
 
 #-----------------------------------------------------------------------
@@ -167,7 +170,7 @@ mountSparseImageRW() {
         logDebug "mountSparseImageRW(): $HDIUTIL attach -stdinpass $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
         `$ECHO $PASSPHRASE | $HDIUTIL attach -stdinpass "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
         if [ $? -ne 0 ] ; then
-          sleep 10;
+          $SLEEP 10;
           `$ECHO $PASSPHRASE | $HDIUTIL attach -stdinpass "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
           if [ $? -ne 0 ] ; then
             logFatal "mountSparseImageRW(): $HDIUTIL failed; exiting."
@@ -177,7 +180,7 @@ mountSparseImageRW() {
         logDebug "mountSparseImageRW(): $HDIUTIL attach $SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE";
         `$HDIUTIL attach "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
         if [ $? -ne 0 ] ; then
-          sleep 10;
+          $SLEEP 10;
           `$HDIUTIL attach "$SPARSE_IMAGE_DIR/$SPARSE_IMAGE_FILE" >> $LOG_FILE 2>&1`;
           if [ $? -ne 0 ] ; then
             logFatal "mountSparseImageRW(): $HDIUTIL failed; exiting."
@@ -198,19 +201,24 @@ mountSparseImageRW() {
   logDebug "$ZFS set readonly=off $ZPOOL_NAME"
   `$ZFS set readonly=off $ZPOOL_NAME`
 
-  # cannot determine cause for mount failure from exit code
-  # all failures, including already mounted, are '1'
-  logDebug "$ZFS unmount $ZPOOL_NAME"
-  `$ZPOOL scrub -s $ZPOOL_NAME`
-  `$ZFS unmount $ZPOOL_NAME`
+  scrub_check "$ZPOOL_NAME"
+  if [[ $SCRUB_STATUS == 0 ]] ; then
+    # cannot determine cause for mount failure from exit code
+    # all failures, including already mounted, are '1'
+    logDebug "$ZFS unmount $ZPOOL_NAME"
+    `$ZPOOL scrub -s $ZPOOL_NAME`
+    `$ZFS unmount $ZPOOL_NAME`
 
-  logDebug "$ZFS mount $ZPOOL_NAME"
-  `$ZFS mount $ZPOOL_NAME`
-  if [ $? -ne 0 ] ; then
-      logFatal "mountSparseImageRW(): '$ZFS mount' reported errors on $ZPOOL_NAME; check $LOG_FILE and manually repair this voume; exiting...";
-  fi;
+    logDebug "$ZFS mount $ZPOOL_NAME"
+    `$ZFS mount $ZPOOL_NAME`
+    if [ $? -ne 0 ] ; then
+        logFatal "mountSparseImageRW(): '$ZFS mount' reported errors on $ZPOOL_NAME; check $LOG_FILE and manually repair this voume; exiting...";
+    fi;
 
-  logDebug "mountSparseImageRW(): Mount complete.";
+    logDebug "mountSparseImageRW(): Mount complete.";
+  else
+    logDebug "mountSparseImageRW(): Detected scrub - skipping unmount/mount sequence";
+  fi
 
   logDebug "mountSparseImageRW(): Attempting chmod 700 $SPARSE_IMAGE_MOUNT/*";
   `$CHMOD 700 $SPARSE_IMAGE_MOUNT/*`
@@ -231,19 +239,24 @@ mountSparseImageRO() {
   $CHMOD 755 $SPARSE_IMAGE_MOUNT/*;
   $CHFLAGS hidden $SPARSE_IMAGE_MOUNT;
 
-  logInfo "mountSparseImageRO(): Unmounting $SPARSE_IMAGE_MOUNT ...";
-  if [ -d "$SPARSE_IMAGE_MOUNT" ] ; then
-      logDebug "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
-      ZPOOL_NAME="`echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-`"
-      logDebug "$ZFS set readonly=on $ZPOOL_NAME"
-      `$ZFS set readonly=on $ZPOOL_NAME`
+  logDebug "echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-"
+  ZPOOL_NAME="`echo $SPARSE_IMAGE_MOUNT | $CUT -d '/' -f3-`"
 
-      logInfo "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT exists; detaching.";
-      `$ZPOOL scrub -s $ZPOOL_NAME`
-      `$HDIUTIL detach "$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`
-      if [ $? -ne 0 ] ; then
-        logWarn "mountSparseImageRO(): '$HDIUTIL detach' reported errors on $ZPOOL_NAME; exiting...";
-      fi;
+  scrub_check "$ZPOOL_NAME"
+
+  if [[ -d "$SPARSE_IMAGE_MOUNT" && $SCRUB_STATUS == 0 ]] ; then
+    logInfo "mountSparseImageRO(): Unmounting $SPARSE_IMAGE_MOUNT ...";
+    logDebug "$ZFS set readonly=on $ZPOOL_NAME"
+    `$ZFS set readonly=on $ZPOOL_NAME`
+
+    logInfo "mountSparseImageRO(): Mount point $SPARSE_IMAGE_MOUNT exists; detaching.";
+    `$ZPOOL scrub -s $ZPOOL_NAME`
+    `$HDIUTIL detach "$SPARSE_IMAGE_MOUNT" >> $LOG_FILE 2>&1`
+    if [ $? -ne 0 ] ; then
+      logWarn "mountSparseImageRO(): '$HDIUTIL detach' reported errors on $ZPOOL_NAME; exiting...";
+    fi;
+  else
+    logDebug "mountSparseImageRO(): Scrub detected - skipping unmount."
   fi;
 
   logInfo "mountSparseImageRO(): Done.";
